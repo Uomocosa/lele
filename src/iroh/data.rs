@@ -7,6 +7,7 @@ pub struct IrohData {
     pub endpoint: Endpoint,
     pub gossip: Gossip,
     pub router: Router,
+    
     pub topic_id: TopicId,
-    pub relay_vec: Vec<RelayUrl>
+    pub relay_url: RelayUrl,
 }

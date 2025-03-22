@@ -2,6 +2,8 @@ use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+
+    
     
     Ok(())
 }
@@ -18,8 +20,8 @@ mod tests {
     // run test by using: 'cargo test get_random_seed -- --exact --nocapture'
     fn get_random_seed() -> Result<()> {
         let mut rng = rand::thread_rng();
-        let random_seed: [u8; 28] = std::array::from_fn(|_| rng.r#gen());
-        println!("const SEED: [u8; 28] = {:?};", random_seed);
+        let random_seed: [u8; 32] = std::array::from_fn(|_| rng.r#gen());
+        println!("const SEED: [u8; 32] = {:?};", random_seed);
         Ok(())
     }
 
