@@ -10,6 +10,8 @@ mod generate_fake_node_addrs;
 mod start_server;
 mod user;
 mod server;
+mod instance;
+mod data;
 
 pub use chat_room::ChatRoom;
 pub use connection::Connection;
@@ -23,6 +25,8 @@ pub use start_server::create_server_endpoint;
 pub use user::User;
 pub use server::Server;
 // pub use ping_pong::ping_pong;
+pub use instance::IrohInstance;
+pub use data::IrohData;
 
 pub mod connection_fn;
 pub mod gossip;
