@@ -71,7 +71,7 @@ mod tests{
     async fn test_search_for_users() -> Result<()> {
         let topic_id = TopicId::from_str(TOPIC)?;
         let relay_vec = vec![];
-        let server = Server::create(topic_id, relay_vec, &SEED).await?;
+        let _server = Server::create(topic_id, relay_vec, &SEED).await?;
         
         Ok(())
     }
