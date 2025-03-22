@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
 use iroh::{protocol::Router, Endpoint, NodeAddr, RelayUrl, SecretKey};
 use iroh_gossip::{net::Gossip, proto::TopicId};
+use crate::string::random_string;
+
 use super::{IrohData, IrohInstance};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -13,7 +15,7 @@ pub type User = IrohInstance<UserData>;
 
 
 impl User {
-    pub async fn create(secret_key: SecretKey, topic_id: TopicId, relay_vec: Vec<RelayUrl>) -> Result<Self> {
+    pub async fn create(secret_key: SecretKey, topic_id: TopicId, relay_vec: Vec<RelayUrl>, name: &str) -> Result<Self> {
         let endpoint = Endpoint::builder().secret_key(secret_key).bind().await?;
         let gossip = Gossip::builder().spawn(endpoint.clone()).await?;
         let router = Router::builder(endpoint.clone())
@@ -21,7 +23,7 @@ impl User {
             .spawn()
             .await?;
         let iroh_data = IrohData { endpoint, gossip, router, topic_id, relay_vec };
-        let data = UserData { name: "???".to_string() };
+        let data = UserData { name: name.to_string() };
         Ok(User::Data { iroh_data, data, debug: false })
     }
 
@@ -39,7 +41,8 @@ impl User {
             Some(relay_url) => vec![relay_url]
         };
         let iroh_data = IrohData { endpoint, gossip, router, topic_id, relay_vec };
-        let data = UserData { name: "???".to_string() };
+        let name = "user_".to_string() + &random_string(7);
+        let data = UserData { name };
         Ok(User::Data { iroh_data, data, debug: false })
     }
 }
@@ -52,6 +55,24 @@ impl User {
                 return Err(anyhow!("search_for_users::NoRelayUrlFound"));
             }
         }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests{
+    use std::str::FromStr;
+
+    use crate::{consts::{SEED, TOPIC}, iroh::Server};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_search_for_users() -> Result<()> {
+        let topic_id = TopicId::from_str(TOPIC)?;
+        let relay_vec = vec![];
+        let server = Server::create(topic_id, relay_vec, &SEED).await?;
+        
         Ok(())
     }
 }
