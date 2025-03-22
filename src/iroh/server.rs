@@ -5,7 +5,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 
 #[derive(Debug, Clone)]
-struct ServerData{
+pub struct ServerData{
     endpoint: Endpoint,
     gossip: Gossip,
     router: Router,
@@ -84,7 +84,7 @@ impl Server {
     pub fn topic_id(&self) -> Option<TopicId> {
         match self {
             Server::Empty => None,
-            Server::Data { server_data , ..} => Some(server_data.topic_id.clone())
+            Server::Data { server_data , ..} => Some(server_data.topic_id)
         }
     }
 
