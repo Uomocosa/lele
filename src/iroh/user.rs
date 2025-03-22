@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
-use iroh::{protocol::Router, Endpoint, NodeAddr, NodeId, RelayUrl, SecretKey};
-use iroh_gossip::{net::{Gossip, GossipTopic}, proto::TopicId};
+use iroh::{protocol::Router, Endpoint, NodeAddr, RelayUrl, SecretKey};
+use iroh_gossip::{net::Gossip, proto::TopicId};
 use crate::string::random_string;
 
 use super::{IrohData, IrohInstance};
@@ -49,10 +49,10 @@ impl User {
 
 // Useful methods
 impl User {
-    pub async fn subscribe_to_node_addreses(&self, node_addrs: Vec<NodeAddr>) -> Result<GossipTopic> {
+    pub async fn add_node_addresses(&self, node_addrs: &Vec<NodeAddr>) -> Result<()> {
         self.assert_correct_relay().await?;
         let debug = self.debug();
-        for node_addr in &node_addrs {
+        for node_addr in node_addrs {
             if node_addr.relay_url.is_none() { 
                 if debug { println!("> found empty node_addr"); }
                 continue; 
@@ -67,21 +67,22 @@ impl User {
             }
             self.add_node_addr(node_addr.clone())?;
         }
-        let node_ids: Vec<NodeId> = node_addrs.iter().map(|addr| addr.node_id).collect();
-        self.subscribe(node_ids)
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests{
-    use std::str::FromStr;
+    use std::{str::FromStr, time::Duration};
+    use iroh::NodeId;
+
     use crate::{consts::{RELAY_VEC, SEED, TOPIC}, iroh::{get_server_addresses, Server}};
     use super::*;
 
     #[tokio::test]
     // run test by using: 'cargo test iroh::user::tests::subscribe_to_node_addreses -- --exact --nocapture'
     async fn subscribe_to_node_addreses() -> Result<()> {
-        // tracing_subscriber::fmt::init();
+        tracing_subscriber::fmt::init();
         let topic_id = TopicId::from_str(TOPIC)?;
         let relay_url = RelayUrl::from_str(RELAY_VEC[0])?;
 
@@ -94,6 +95,8 @@ mod tests{
         println!("> server is waiting for user to find it...");
         // println!("> server_addr:\n{:#?}", server.node_addr().await?);
         
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
         // User side
         println!("> creating user ...");
         let mut user = User::random(topic_id).await?;
@@ -101,7 +104,9 @@ mod tests{
         let id_vec: Vec<u64> = (0..10).collect();
         let server_addrs = get_server_addresses(&id_vec, RELAY_VEC, &SEED).await?;
         // println!("> server_addrs:\n{:#?}", server_addrs);
-        let mut user_gtopic = user.subscribe_to_node_addreses(server_addrs).await?;
+        user.add_node_addresses(&server_addrs).await?;
+        let node_ids: Vec<NodeId> = server_addrs.iter().map(|addr| addr.node_id).collect();
+        let mut user_gtopic= user.subscribe_and_join(node_ids).await?;
         user_gtopic.joined().await?;
         println!("> user has joined a server!");
         println!("> you can now send messages via user_gtopic!");

@@ -1,7 +1,7 @@
 use std::{io::{self, Write}, str::FromStr, time::{Duration, Instant}};
 
 use anyhow::Result;
-use iroh::RelayUrl;
+use iroh::{NodeId, RelayUrl};
 use iroh_gossip::proto::TopicId;
 use lele::{consts::{RELAY_VEC, SEED, TOPIC}, iroh::{get_server_addresses, Server, User}};
 
@@ -10,29 +10,27 @@ async fn main() -> Result<()> {
     // tracing_subscriber::fmt::init();
     // let start = Instant::now();
     let topic_id = TopicId::from_str(TOPIC)?;
-    let relay_url = RelayUrl::from_str(RELAY_VEC[0])?;
-    let mut id = 0;
-
-    
+    let id = 0;
 
     // User side
     println!("> creating user ...");
     let mut user = User::random(topic_id).await?;
     user.set_debug(true)?;
-    let id_vec: Vec<u64> = vec![id];
+    let id_vec = vec![id];
     let server_addrs = get_server_addresses(&id_vec, RELAY_VEC, &SEED).await?;
     // println!("> server_addrs:\n{:#?}", server_addrs);
-    let mut user_gtopic = user.subscribe_to_node_addreses(server_addrs.clone()).await?;
-    let user_handle = tokio::spawn(
-        async move { 
-            user_gtopic.joined().await?;
-            println!("\n> user: connected!");
-            anyhow::Ok(user_gtopic)
-        }
-    );
+    user.add_node_addresses(&server_addrs).await?;
+    let user_clone = user.clone();
+    let node_ids: Vec<NodeId> = server_addrs.iter().map(|addr| addr.node_id).collect();
+    let user_handle = tokio::spawn(async move {
+        let user_gtopic = user_clone.subscribe_and_join(node_ids).await?;
+        println!("\n> user: connected!");
+        anyhow::Ok(user_gtopic)
+    });
+    
     let joined_timer = Instant::now();
     print!("> searching for servers "); io::stdout().flush()?;
-    while joined_timer.elapsed() <= Duration::from_secs(2) {
+    while joined_timer.elapsed() <= Duration::from_secs(10) {
         print!("."); io::stdout().flush()?;
         if user_handle.is_finished() {break;}
         tokio::time::sleep(Duration::from_millis(250)).await;
@@ -41,66 +39,27 @@ async fn main() -> Result<()> {
     match user_handle.is_finished() {
         true => {
             println!("> user has joined a server!");
-            id += 1
         },
         false => {
             println!("> server Id({}) is not yet established ;;", id);
-            user_handle.abort();
+            // user_handle.abort();
         },
     }
-
-
 
     // Server side
     println!("> creating server ...");
+    let id = 0;
+    let relay_url = RelayUrl::from_str(RELAY_VEC[0])?;
     let server = Server::create(id, topic_id, relay_url, &SEED).await?;
-    let mut server_gtopic = server.subscribe(vec![])?;
-    tokio::spawn(
-        async move { 
-            server_gtopic.joined().await?;
-            println!("> server: connected!");
-            anyhow::Ok(server_gtopic)
-        }
-    );
-    println!("> server is waiting for user to find it ...");
-    println!("> server_addr:\n{:#?}", server.node_addr().await?);
+    let server_clone = server.clone();
+    let _server_handle = tokio::spawn(async move { 
+        let server_gtopic = server_clone.subscribe_and_join(vec![]).await?;
+        println!("\n> server: connected!");
+        anyhow::Ok(server_gtopic)
+    });
+    println!("> server is waiting for user to find it...");
 
-    
-    println!("> waiting for user to find at least your own server ...");
-    user.close().await?;
-    println!("> re-creating user ...");
-    let mut user = User::random(topic_id).await?;
-    user.set_debug(true)?;
-    let id_vec: Vec<u64> = vec![id];
-    let server_addrs = get_server_addresses(&id_vec, RELAY_VEC, &SEED).await?;
-    // println!("> server_addrs:\n{:#?}", server_addrs);
-    let mut user_gtopic = user.subscribe_to_node_addreses(server_addrs.clone()).await?;
-    let user_handle = tokio::spawn(
-        async move { 
-            user_gtopic.joined().await?;
-            println!("\n> user: connected!");
-            anyhow::Ok(user_gtopic)
-        }
-    );
-    let joined_timer = Instant::now();
-    print!("> searching for servers "); io::stdout().flush()?;
-    while joined_timer.elapsed() <= Duration::from_secs(15) {
-        print!("."); io::stdout().flush()?;
-        if user_handle.is_finished() {break;}
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
-    println!();
-    match user_handle.is_finished() {
-        true => {
-            println!("> user has joined a server!");
-            // id += 1
-        },
-        false => {
-            println!("> server Id({}) is not yet established ;;", id);
-            user_handle.abort();
-        },
-    }
-    
+    user_handle.await??;
 
     // println!("> finished [{:?}]", start.elapsed());
     tokio::time::sleep(Duration::from_millis(250)).await;
