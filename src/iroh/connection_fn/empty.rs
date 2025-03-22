@@ -7,7 +7,7 @@ pub fn empty() -> Connection {
     Connection {
         command: Command::Open { topic: None },
         secret_key: None,
-        no_relay: true,
+        no_relay: false,
         relay: None,
         port: 0,
         ipv4: Ipv4Addr::UNSPECIFIED,
@@ -16,6 +16,7 @@ pub fn empty() -> Connection {
         ticket: None,
         topic: None,
         peers: vec![],
+        discovery: None,
 
         endpoint: None,
         gossip: None,

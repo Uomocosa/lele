@@ -7,9 +7,9 @@ use anyhow::{Result, anyhow};
 
 use crate::iroh::connection_fn as cfn;
 use crate::iroh::gossip::Command;
-use iroh::{Endpoint, NodeAddr, PublicKey, RelayUrl, SecretKey, protocol::Router};
+use iroh::{discovery::static_provider::StaticProvider, protocol::Router, Endpoint, NodeAddr, PublicKey, RelayUrl, SecretKey};
 use iroh_gossip::{
-    net::{Gossip, GossipReceiver, GossipSender},
+    net::{Gossip, GossipReceiver, GossipSender, GossipTopic},
     proto::TopicId,
 };
 
@@ -35,6 +35,7 @@ pub struct Connection {
     pub ticket: Option<Ticket>,
     pub topic: Option<TopicId>,
     pub peers: Vec<NodeAddr>,
+    pub discovery: Option<StaticProvider>,
 
     // pub peers: Vec<PublicKey>,
     pub debug: bool,
@@ -44,6 +45,8 @@ pub struct Connection {
 // #[rustfmt::fn_single_line] // This should be set to EACH function in this block ;; AND it doesn't even work
 impl Connection {
     pub fn _empty() -> Self { cfn::empty() }
+    pub fn random() -> Self { cfn::random() }
+    pub async fn finalize_connection(&mut self) -> Result<&mut Self> { cfn::finalize_connection(self).await }
 
 
 
@@ -56,7 +59,7 @@ impl Connection {
 
     pub fn _recive() {}
 
-    pub async fn subscribe(self) -> Result<(GossipSender, GossipReceiver)> { cfn::subscribe(self).await }
+    pub fn subscribe(self) -> Result<GossipTopic> { cfn::subscribe(self) }
     pub async fn subscribe_and_join(self) -> Result<(GossipSender, GossipReceiver)> { cfn::subscribe_and_join(self).await }
 
     pub async fn connect_to_peers(self) -> Result<(GossipSender, GossipReceiver)> { cfn::connect_to_peers(self).await }
@@ -65,6 +68,8 @@ impl Connection {
     pub async fn create_ticket(&mut self) -> Result<Ticket> { cfn::create_ticket(self).await }
     pub async fn spawn_gossip(&mut self) -> Result<&mut Self> { cfn::spawn_gossip(self).await }
     pub async fn spawn_router(&mut self) -> Result<&mut Self> { cfn::spawn_router(self).await }
+
+    // pub async fn _reachable_peers(self) -> Result<Vec<NodeAddr>> { cfn::_reachable_peers(self).await }
 
     pub fn secret_key(&self) -> Result<&SecretKey> {
         if self.secret_key.is_none() { 
@@ -80,12 +85,27 @@ impl Connection {
         Ok(self.secret_key.as_ref().unwrap().public())
     }
 
+    pub fn topic(&self) -> Result<String> {
+        if self.topic.is_none() { 
+            return Err(anyhow!("Connection::topic::NoTopicFound")); 
+        }
+        Ok(self.topic.unwrap().to_string())
+    }
+
+    pub fn topic_id(&self) -> Result<TopicId> {
+        if self.topic.is_none() { 
+            return Err(anyhow!("Connection::topic_id::NoTopicFound")); 
+        }
+        Ok(self.topic.unwrap())
+    }
+
+
     pub async fn handle_iroh_connection(&mut self, iroh_connection: iroh::endpoint::Connection) -> Result<&mut Self> { 
         cfn::handle_iroh_connection(self, iroh_connection).await 
     }
-    pub async fn handle_iroh_connections(self, iroh_connections: Vec<iroh::endpoint::Connection>) -> Result<(GossipSender, GossipReceiver)> { 
-        cfn::handle_iroh_connections(self, iroh_connections).await 
-    }
+    // pub async fn handle_iroh_connections(self, iroh_connections: Vec<iroh::endpoint::Connection>) -> Result<(GossipSender, GossipReceiver)> { 
+    //     cfn::handle_iroh_connections(self, iroh_connections).await 
+    // }
 
     pub fn set_name(&mut self, name: &str) -> &mut Self {
         self.name = Some(name.to_string());
@@ -94,6 +114,11 @@ impl Connection {
 
     pub fn set_secret_key(&mut self, secret_key: SecretKey) -> &mut Self {
         self.secret_key = Some(secret_key);
+        self
+    }
+
+    pub fn set_random_secret_key(&mut self) -> &mut Self {
+        self.secret_key = Some(SecretKey::generate(rand::rngs::OsRng));
         self
     }
 
@@ -168,6 +193,11 @@ impl Connection {
         Ok(ports)
     }
 
+    pub fn discovery(&self) -> Result<&StaticProvider> {
+        if self.endpoint.is_none() { return Err(anyhow!("Connection::discovery::EndpointNotFound")); }
+        Ok(self.discovery.as_ref().unwrap())
+    }
+
     pub fn is_empty(&self) -> bool {
         if self.secret_key.is_some() { return false; }
         if self.relay.is_some() { return false; }
@@ -185,9 +215,21 @@ impl Connection {
     }
 
     pub async fn close(self) -> Result<()> {
-        self.endpoint.unwrap().close().await;
-        self.router.unwrap().shutdown().await?;
+        if self.endpoint.is_some() { self.endpoint.unwrap().close().await; }
+        if self.router.is_some() { self.router.unwrap().shutdown().await?; }
         Ok(())
+    }
+
+    pub fn try_to_to_start_subscribe_and_join_process(&self) -> 
+    Option<tokio::task::JoinHandle<Result<(GossipSender, GossipReceiver)>>>
+    {
+        let mut handle = None;
+        if !self.is_empty() {
+            handle = Some(tokio::spawn(self.clone().subscribe_and_join()));
+            if self. debug { println!("> 'subscribe_and_join' process started"); }
+        } 
+        else if self. debug { println!("> cannot start a 'subscribe_and_join' process"); }
+        handle
     }
 
 }

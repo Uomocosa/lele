@@ -15,16 +15,21 @@ pub async fn bind_endpoint(connection: &mut Connection) -> Result<&mut Connectio
         (true, None) => RelayMode::Disabled,
         (true, Some(_)) => bail!("You cannot set --no-relay and --relay at the same time"),
     };
-    let discovery = StaticProvider::from_node_info(connection.peers.clone());
+    // let discovery = StaticProvider::from_node_info(connection.peers.clone());
+    let discovery = StaticProvider::new();
     let endpoint = Endpoint::builder()
         .secret_key(secret_key)
         .relay_mode(relay_mode)
         .bind_addr_v4(connection.socket_addr())
-        .add_discovery(|_| Some(discovery))
-        // .discovery_local_network()
+        .add_discovery({
+            let discovery = discovery.clone();
+            move |_| Some(discovery)
+        })
+        .discovery_local_network()
         .bind()
         .await?;
     connection.endpoint = Some(endpoint.clone());
+    connection.discovery = Some(discovery.clone());
     if connection.debug {
         println!("> {name}: our node id: {}", endpoint.node_id());
     }

@@ -4,7 +4,28 @@ use anyhow::Result;
 async fn main() -> Result<()> {
     // lele::__tests__::lele_connections().await
     // lele::__tests__::iroh_connections().await
-    lele::__tests__::iroh_connections_v2().await
+    // lele::__tests__::iroh_connections_v2().await
+    // lele::__tests__::iroh_connections_v3().await
+    // lele::__tests__::iroh_connection_bug().await
+    // lele::__tests__::iroh_connection_bug_v2().await
+    // lele::__tests__::iroh_connection_bug_v3().await
+    // lele::__tests__::iroh_connection_v4().await
+    // lele::__tests__::lele_find_connection().await
+    // lele::__tests__::lele_find_connection_v2().await
+    // lele::__tests__::lele_find_connection_v3().await
+    // lele::__tests__::one().await //works!!!!
+    // lele::__tests__::two().await // does not work
+    // lele::__tests__::three().await //works but not how it should
+    // lele::__tests__::four().await // does not work
+    // lele::__tests__::five().await //works!!!!
+    // lele::__tests__::six().await //works but not how it should
+    // lele::__tests__::seven().await //works but not how it should
+    // lele::__tests__::eight().await //works but not how it should
+    // lele::__tests__::nine().await //works!!!!
+    // lele::__tests__::ten().await // It does not work if the network or PC changes, DO NOT KNOW WHY
+    // lele::__tests__::eleven().await // doesn't work
+    // lele::__tests__::twelve().await // 
+    lele::__tests__::thirteen().await // 
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ pub async fn create_known_server(
     let mut server_connection = Connection::_empty();
     for &port in possible_ports {
         println!("> port: {}", port);
-        let ip = match get_server_ip(port).await {
+        let ip = match get_server_ip().await {
             Ok(ip) => ip,
             Err(_) => continue,
         };

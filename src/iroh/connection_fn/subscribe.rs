@@ -1,12 +1,9 @@
 use anyhow::{Result, anyhow};
-use iroh_gossip::net::{GossipReceiver, GossipSender};
+use iroh_gossip::net::GossipTopic;
 
-use crate::iroh::{
-    Connection,
-    gossip::{Message, SignedMessage},
-};
+use crate::iroh::Connection;
 
-pub async fn subscribe(connection: Connection) -> Result<(GossipSender, GossipReceiver)> {
+pub fn subscribe(connection: Connection) -> Result<GossipTopic> {
     if connection.gossip.is_none() {
         return Err(anyhow!("Connection::connect_to_peers::GossipNotFound"));
     }
@@ -21,7 +18,7 @@ pub async fn subscribe(connection: Connection) -> Result<(GossipSender, GossipRe
     let name = connection.name.clone().unwrap_or("???".to_string());
     let debug = connection.debug;
 
-    let gossip = connection.gossip.as_ref().unwrap();
+    let gossip = connection.gossip.clone().unwrap();
     if debug {
         println!("> connection.peers: {:#?}", &connection.peers);
     }
@@ -31,9 +28,33 @@ pub async fn subscribe(connection: Connection) -> Result<(GossipSender, GossipRe
         println!("> {name}: subscribed!");
         println!("> {name} joined? {}", gossip_topic.is_joined());
     }
-    let (_sender, _receiver) = gossip_topic.split();
-    let message = Message::AboutMe { name };
-    let encoded_message = SignedMessage::sign_and_encode(connection.secret_key()?, &message)?;
-    _sender.broadcast(encoded_message).await?;
-    Ok((_sender, _receiver))
+    Ok(gossip_topic)
+}
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+    
+    #[tokio::test]
+    // run test by using: 'cargo test iroh::connection_fn::subscribe::tests::one -- --exact --nocapture'
+    async fn one() -> Result<()> {
+        tracing_subscriber::fmt::init();
+        let mut server = Connection::random();
+        server.finalize_connection().await?;
+
+        let mut user = Connection::random();
+        user.set_topic(&server.topic()?);
+        user.finalize_connection().await?;
+
+        let server_node_addr = server.node_addr().await?;
+        user.peers = vec![server_node_addr.clone()];
+        user.discovery()?.add_node_info(server_node_addr.clone());
+        // user.endpoint.clone().unwrap().add_node_addr(server_node_addr.clone())?;
+
+        let _ = subscribe(server)?;
+        let mut user_gossip_topic = subscribe(user)?;
+        user_gossip_topic.joined().await?;
+
+        Ok(())
+    }
 }

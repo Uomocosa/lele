@@ -1,7 +1,7 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, str::FromStr};
 
 use anyhow::Result;
-use iroh::NodeAddr;
+use iroh::{NodeAddr, RelayUrl};
 
 use super::get_secret_key_from_ip;
 
@@ -23,11 +23,14 @@ pub fn get_all_192_168_server_addresses(
     }
     let mut server_addresses = Vec::new();
     for (ip, port) in combinations {
-        let node_addr = NodeAddr::from_parts(
-            get_secret_key_from_ip(&ip, seed).public(),
-            None,
-            vec![SocketAddr::new(IpAddr::from(ip), port)],
-        );
+        // println!("> new server_address: {:?} | {:?}", ip, port);
+        let node_id = get_secret_key_from_ip(&ip, seed).public();
+        let relay_url = Some(RelayUrl::from_str("https://euw1-1.relay.iroh.network./")?);
+        let direct_addresses = vec![SocketAddr::new(IpAddr::from(ip), port)];
+        // println!("> node_id: {:?}", node_id);
+        // println!("> relay_url: {:?}", relay_url);
+        // println!("> direct_addresses: {:?}", direct_addresses.clone());
+        let node_addr = NodeAddr::from_parts(node_id, relay_url, direct_addresses);
         server_addresses.push(node_addr)
     }
     Ok(server_addresses)

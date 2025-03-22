@@ -2,7 +2,10 @@
 #![allow(unused_imports)]
 
 use anyhow::Result;
-use iroh::{NodeAddr, PublicKey, SecretKey, endpoint::ConnectionError};
+use iroh::{
+    NodeAddr, PublicKey, SecretKey,
+    endpoint::{self, ConnectionError},
+};
 use iroh_gossip::{net::Gossip, proto::TopicId};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -60,8 +63,8 @@ pub async fn iroh_connections_v2() -> Result<()> {
     user.set_secret_key(SecretKey::generate(rand::rngs::OsRng));
     user.set_topic(TOPIC);
     user.bind_endpoint().await?;
-    user.spawn_gossip().await?;
-    user.spawn_router().await?;
+    // user.spawn_gossip().await?;
+    // user.spawn_router().await?;
     println!("> creating vector of connections ");
     let adrrs_chunks = chunk_vector(&user.peers, chunk_len);
     let mut succesfull_connections = Vec::new();
@@ -107,14 +110,15 @@ pub async fn iroh_connections_v2() -> Result<()> {
             i = 0;
         } // loop over
     }
-    println!(
-        "> the first connection found has ALPN: {:?}",
-        succesfull_connections[0].0.alpn().unwrap()
-    );
+    // println!(
+    //     "> the first connection found has ALPN: {:?}",
+    //     succesfull_connections[0].0.alpn().unwrap()
+    // );
     assert_eq!(
         succesfull_connections[0].0.alpn().unwrap(),
         iroh_gossip::ALPN
     );
+    // println!("> first connection:\n{:#?}", succesfull_connections[0].0);
     let (iroh_connections, _node_addrs): (Vec<_>, Vec<_>) =
         succesfull_connections.iter().cloned().unzip();
     // user.peers.extend(node_addrs);
@@ -122,31 +126,47 @@ pub async fn iroh_connections_v2() -> Result<()> {
     server.debug = true;
     // user.peers = node_addrs;
     user.peers = vec![];
-    user.handle_iroh_connection(iroh_connections[0].clone()).await?;
-    let mut user_clone = user.clone();
-    let (user_tx, user_rx) = user.subscribe_and_join().await?;
-    // let (user_tx, user_rx) = user
-    //     .clone()
-    //     .handle_iroh_connections(iroh_connections)
-    //     .await?;
-    tokio::spawn(subscribe_loop(user_rx));
-    user_clone._send(user_tx, "hello").await?;
-
-    if let Some(server_handle) = _server_handle {
-        println!("> trying to get server_handle ...");
-        let (server_tx, server_rx) = server_handle.await??;
-        tokio::spawn(subscribe_loop(server_rx));
-        server._send(server_tx, "HI!").await?;
-        println!("> server_handle obtained!");
-    } else {
-        println!("> no server was established");
+    user.spawn_gossip().await?;
+    user.spawn_router().await?;
+    let endpoint = user.endpoint.clone().unwrap();
+    let gossip = Gossip::builder().spawn(endpoint.clone()).await?;
+    gossip
+        .handle_connection(iroh_connections[0].clone())
+        .await?;
+    println!("> user: trying to accept a connection");
+    endpoint.clone().accept().await;
+    if !server.is_empty() {
+        println!("> server: trying to accept a connection");
+        server.endpoint.clone().unwrap().accept().await;
     }
+    // println!("> gossip:\n{:#?}", gossip);
+    // user.gossip = Some(gossip);
+    // user.spawn_router().await?;
+    // let mut user_clone = user.clone();
+    // let (user_tx, user_rx) = user.subscribe_and_join().await?;
+    // // let (user_tx, user_rx) = user
+    // //     .clone()
+    // //     .handle_iroh_connections(iroh_connections)
+    // //     .await?;
+    // tokio::spawn(subscribe_loop(user_rx));
+    // user_clone._send(user_tx, "hello").await?;
+
+    // if let Some(server_handle) = _server_handle {
+    //     println!("> trying to get server_handle ...");
+    //     let (server_tx, server_rx) = server_handle.await??;
+    //     tokio::spawn(subscribe_loop(server_rx));
+    //     server._send(server_tx, "HI!").await?;
+    //     println!("> server_handle obtained!");
+    // } else {
+    //     println!("> no server was established");
+    // }
     // user.clone().connect_to_peers().await?;
 
     println!("> finished [{:?}]", start.elapsed());
-    println!("> press Ctrl+C to exit.");
-    tokio::signal::ctrl_c().await?;
-    user_clone.close().await?;
+    // println!("> press Ctrl+C to exit.");
+    // tokio::signal::ctrl_c().await?;
+    println!("> closing ...");
+    user.close().await?;
     if !server.is_empty() {
         server.close().await?;
     }

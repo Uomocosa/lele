@@ -14,6 +14,9 @@ mod spawn_gossip;
 mod spawn_router;
 mod subscribe;
 mod subscribe_and_join;
+mod reachable_peers;
+mod random;
+mod finalize_connection;
 
 // mod create_new_pkarr_servers;
 // pub use create_new_pkarr_servers::create_new_pkarr_servers;
@@ -33,3 +36,6 @@ pub use spawn_gossip::spawn_gossip;
 pub use spawn_router::spawn_router;
 pub use subscribe::subscribe;
 pub use subscribe_and_join::subscribe_and_join;
+pub use reachable_peers::_reachable_peers;
+pub use random::random;
+pub use finalize_connection::finalize_connection;
