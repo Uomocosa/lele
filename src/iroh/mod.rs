@@ -10,7 +10,6 @@ mod generate_fake_node_addrs;
 mod start_server;
 mod user;
 mod server;
-mod instance;
 
 pub use chat_room::ChatRoom;
 pub use connection::Connection;
@@ -23,7 +22,6 @@ pub use generate_fake_node_addrs::generate_fake_node_addrs;
 pub use start_server::create_server_endpoint;
 pub use user::User;
 pub use server::Server;
-pub use instance::Instance;
 // pub use ping_pong::ping_pong;
 
 pub mod connection_fn;
