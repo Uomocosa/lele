@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use anyhow::{anyhow, Result};
-use iroh::{protocol::Router, Endpoint, NodeAddr, NodeId, PublicKey, RelayUrl, SecretKey};
+use iroh::{endpoint::{DirectAddrInfo, RemoteInfo}, protocol::Router, Endpoint, NodeAddr, NodeId, PublicKey, RelayUrl, SecretKey};
 use iroh_gossip::{net::{Gossip, GossipTopic}, proto::TopicId};
 
 use super::IrohData;
@@ -59,6 +61,11 @@ impl<T> IrohInstance<T> {
         }
     }
 
+    pub fn node_id(&self) -> Option<NodeId> {
+        let endpoint = self.endpoint();
+        endpoint.map(|endpoint| endpoint.node_id())
+    }
+
     pub async fn node_addr(&self) -> Result<Option<NodeAddr>> {
         match self {
             IrohInstance::Empty => Ok(None),
@@ -102,6 +109,43 @@ impl<T> IrohInstance<T> {
             IrohInstance::Empty => Err(anyhow!("instance::subscribe_and_join::UserIsEmpty")),
             IrohInstance::Data { iroh_data , ..} => {
                 Ok(iroh_data.gossip.subscribe_and_join(iroh_data.topic_id, node_ids).await?)
+            },
+        }
+    }
+
+    pub fn remote_info_iter(&self) -> Result<impl Iterator<Item = RemoteInfo>> {
+        match self {
+            IrohInstance::Empty => Err(anyhow!("instance::peers_addrs::UserIsEmpty")),
+            IrohInstance::Data { iroh_data , ..} => {
+                Ok(iroh_data.endpoint.remote_info_iter())
+            },
+        }
+    }
+
+    pub fn online_peers(&self) -> Result<HashMap<NodeId, Vec<DirectAddrInfo>>> {
+        match self {
+            IrohInstance::Empty => Err(anyhow!("instance::peers_addrs::UserIsEmpty")),
+            IrohInstance::Data {..} => {
+                let mut hmap: HashMap<NodeId, Vec<DirectAddrInfo>> = HashMap::new();
+                for info in self.remote_info_iter()? {
+                    if info.latency.is_none() { continue; }
+                    hmap.insert(info.node_id, info.addrs);
+                }
+                Ok(hmap)
+            },
+        }
+    }
+
+    pub fn offline_peers(&self) -> Result<Vec<NodeId>> {
+        match self {
+            IrohInstance::Empty => Err(anyhow!("instance::peers_addrs::UserIsEmpty")),
+            IrohInstance::Data {..} => {
+                let mut nodeid_vec: Vec<NodeId> = Vec::new();
+                for info in self.remote_info_iter()? {
+                    if info.latency.is_some() { continue; }
+                    nodeid_vec.push(info.node_id);
+                }
+                Ok(nodeid_vec)
             },
         }
     }

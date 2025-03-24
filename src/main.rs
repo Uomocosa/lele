@@ -1,4 +1,4 @@
-use std::{io::{self, Write}, str::FromStr, time::{Duration, Instant}};
+use std::{collections::HashMap, io::{self, Write}, str::FromStr, time::{Duration, Instant}};
 
 use anyhow::Result;
 use iroh::{NodeId, RelayUrl};
@@ -16,8 +16,14 @@ async fn main() -> Result<()> {
     println!("> creating user ...");
     let mut user = User::random(topic_id).await?;
     user.set_debug(true)?;
-    let id_vec = vec![id];
+    let start_id = id;
+    let end_id = id+24;
+    let id_vec: Vec<u64> = (start_id..end_id).collect();
     let server_addrs = get_server_addresses(&id_vec, RELAY_VEC, &SEED).await?;
+    let mut server_addrs_map: HashMap<NodeId, u64> = HashMap::new();
+    for (i, addr) in server_addrs.iter().enumerate() {
+        server_addrs_map.insert(addr.node_id, i as u64);
+    }
     // println!("> server_addrs:\n{:#?}", server_addrs);
     user.add_node_addresses(&server_addrs).await?;
     let user_clone = user.clone();
@@ -37,20 +43,22 @@ async fn main() -> Result<()> {
     }
     println!();
     match user_handle.is_finished() {
-        true => {
-            println!("> user has joined a server!");
-        },
-        false => {
-            println!("> server Id({}) is not yet established ;;", id);
-            // user_handle.abort();
-        },
+        true => println!("> user has joined a server!"),
+        false => println!("> user did non find any server to join ;;"),
     }
 
     // Server side
-    println!("> creating server ...");
-    let id = 0;
+    let offline_peers = user.offline_peers()?;
+    // println!("offline_peers:\n{:?}", offline_peers);
+    if offline_peers.is_empty() { todo!(); }
+    let id = offline_peers
+        .iter()
+        .map(|p| server_addrs_map.get(p).unwrap())
+        .min()
+        .unwrap();
+    println!("> stating server Id({id})");
     let relay_url = RelayUrl::from_str(RELAY_VEC[0])?;
-    let server = Server::create(id, topic_id, relay_url, &SEED).await?;
+    let server = Server::create(*id, topic_id, relay_url, &SEED).await?;
     let server_clone = server.clone();
     let _server_handle = tokio::spawn(async move { 
         let server_gtopic = server_clone.subscribe_and_join(vec![]).await?;
@@ -59,11 +67,17 @@ async fn main() -> Result<()> {
     });
     println!("> server is waiting for user to find it...");
 
-    user_handle.await??;
+
+    let _user_gtopic = user_handle.await??;
+    println!("> user.node_id(): {:?}", user.node_id());
+    println!("> use user_gtopic to send messages!");
+    println!("> online_peers:\n{:?}", user.online_peers()?.keys());
+
 
     // println!("> finished [{:?}]", start.elapsed());
     tokio::time::sleep(Duration::from_millis(250)).await;
     println!("> press Ctrl+C to exit.");  tokio::signal::ctrl_c().await?;
+    println!("> online_peers:\n{:?}", user.online_peers()?.keys());
     println!("> closing server ..."); server.close().await?;
     println!("> closing user ..."); user.close().await?;
     Ok(())
