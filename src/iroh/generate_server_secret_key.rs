@@ -1,5 +1,5 @@
 use iroh::SecretKey;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 pub fn generate_server_secret_key(id: u64, seed: &[u8; 32]) -> SecretKey {
     let mut rng = StdRng::from_seed(*seed);

@@ -1,6 +1,5 @@
+mod message;
 mod signed_message;
-mod message_content;
 
-
+pub use message::Message;
 pub use signed_message::SignedMessage;
-pub use message_content::MessageContent;

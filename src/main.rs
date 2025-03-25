@@ -1,95 +1,139 @@
-use std::{collections::HashMap, io::{self, Write}, str::FromStr, time::{Duration, Instant}};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
-use anyhow::Result;
-use iroh::{NodeId, RelayUrl};
-use iroh_gossip::proto::TopicId;
-use lele::{consts::{RELAY_VEC, SEED, TOPIC}, iroh::{get_server_addresses, Server, User}};
+use anyhow::{Result, anyhow};
+use iroh::SecretKey;
+use iroh_gossip::net::{Event, GossipEvent, GossipReceiver, GossipSender};
+use lele::iroh::{
+    User, connect,
+    gossip::{Message, SignedMessage},
+};
+use n0_future::TryStreamExt;
+
+struct Sender {
+    // user: &'a User,
+    secret_key: SecretKey,
+    gossip_sender: GossipSender,
+}
+
+impl Sender {
+    pub fn create(user: &User, gossip_sender: GossipSender) -> Result<Self> {
+        match user {
+            User::Empty => return Err(anyhow!("todo::create::UserIsEmpty")),
+            User::Data { .. } => {}
+        }
+        let secret_key = match user.secret_key()? {
+            None => return Err(anyhow!("todo::broadcast::SecretKeyNotFound")),
+            Some(secret_key) => secret_key,
+        };
+        Ok(Sender {
+            secret_key,
+            gossip_sender,
+        })
+    }
+
+    pub async fn broadcast(&self, message: &Message) -> Result<()> {
+        let encoded_message = SignedMessage::sign_and_encode(&self.secret_key, message)?;
+        self.gossip_sender.broadcast(encoded_message).await?;
+        Ok(())
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // tracing_subscriber::fmt::init();
-    // let start = Instant::now();
-    let topic_id = TopicId::from_str(TOPIC)?;
-    let id = 0;
+    let start = Instant::now();
 
-    // User side
-    println!("> creating user ...");
-    let mut user = User::random(topic_id).await?;
-    user.set_debug(true)?;
-    let start_id = id;
-    let end_id = id+24;
-    let id_vec: Vec<u64> = (start_id..end_id).collect();
-    let server_addrs = get_server_addresses(&id_vec, RELAY_VEC, &SEED).await?;
-    let mut server_addrs_map: HashMap<NodeId, u64> = HashMap::new();
-    for (i, addr) in server_addrs.iter().enumerate() {
-        server_addrs_map.insert(addr.node_id, i as u64);
-    }
-    // println!("> server_addrs:\n{:#?}", server_addrs);
-    user.add_node_addresses(&server_addrs).await?;
-    let user_clone = user.clone();
-    let node_ids: Vec<NodeId> = server_addrs.iter().map(|addr| addr.node_id).collect();
-    let user_handle = tokio::spawn(async move {
-        let user_gtopic = user_clone.subscribe_and_join(node_ids).await?;
-        println!("\n> user: connected!");
-        anyhow::Ok(user_gtopic)
+    let (user, server, user_gtopic) = connect().await?;
+    let (gossip_sender, mut receiver) = user_gtopic.split();
+    let sender = Sender::create(&user, gossip_sender)?;
+    let message = Message::SimpleText {
+        text: "Hello!".to_string(),
+    };
+    sender.broadcast(&message).await?;
+    println!("> sent: Hello!");
+    // sender.broadcast(encoded_message).await?;
+
+    tokio::spawn(async move {
+        let mut usernames = HashMap::new();
+        while let Some(event) = receiver.try_next().await? {
+            if let Event::Gossip(GossipEvent::Received(msg)) = event {
+                let (from, message) = SignedMessage::verify_and_decode(&msg.content)?;
+                match message {
+                    Message::AboutMe { username } => {
+                        usernames.insert(from, username.clone());
+                        println!("> {} is now known as {}", from.fmt_short(), username);
+                    }
+                    Message::SimpleText { text } => {
+                        let username = usernames
+                            .get(&from)
+                            .map_or_else(|| from.fmt_short(), String::to_string);
+                        println!("> {}: {}", username, text);
+                    }
+                    Message::RequestImg { image_name } => {
+                        let username = usernames
+                            .get(&from)
+                            .map_or_else(|| from.fmt_short(), String::to_string);
+                        println!("> {} rquested image: {}", username, image_name);
+                    }
+                }
+            }
+        }
+        anyhow::Ok(())
     });
-    
-    let joined_timer = Instant::now();
-    print!("> searching for servers "); io::stdout().flush()?;
-    while joined_timer.elapsed() <= Duration::from_secs(10) {
-        print!("."); io::stdout().flush()?;
-        if user_handle.is_finished() {break;}
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
-    println!();
-    match user_handle.is_finished() {
-        true => println!("> user has joined a server!"),
-        false => println!("> user did non find any server to join ;;"),
-    }
 
-    // Server side
-    let offline_peers = user.offline_peers()?;
-    // println!("offline_peers:\n{:?}", offline_peers);
-    if offline_peers.is_empty() { todo!(); }
-    let id = offline_peers
-        .iter()
-        .map(|p| server_addrs_map.get(p).unwrap())
-        .min()
-        .unwrap();
-    println!("> stating server Id({id})");
-    let relay_url = RelayUrl::from_str(RELAY_VEC[0])?;
-    let server = Server::create(*id, topic_id, relay_url, &SEED).await?;
-    let server_clone = server.clone();
-    let _server_handle = tokio::spawn(async move { 
-        let server_gtopic = server_clone.subscribe_and_join(vec![]).await?;
-        println!("\n> server: connected!");
-        anyhow::Ok(server_gtopic)
-    });
-    println!("> server is waiting for user to find it...");
-
-
-    let _user_gtopic = user_handle.await??;
-    println!("> user.node_id(): {:?}", user.node_id());
-    println!("> use user_gtopic to send messages!");
-    println!("> online_peers:\n{:?}", user.online_peers()?.keys());
-
-
-    // println!("> finished [{:?}]", start.elapsed());
+    println!("> finished [{:?}]", start.elapsed());
     tokio::time::sleep(Duration::from_millis(250)).await;
-    println!("> press Ctrl+C to exit.");  tokio::signal::ctrl_c().await?;
+    println!("> press Ctrl+C to exit.");
+    tokio::signal::ctrl_c().await?;
+    sender.broadcast(&message).await?;
+    println!("> sent: Hello! (again)");
     println!("> online_peers:\n{:?}", user.online_peers()?.keys());
-    println!("> closing server ..."); server.close().await?;
-    println!("> closing user ..."); user.close().await?;
+    println!("> closing server ...");
+    server.close().await?;
+    println!("> closing user ...");
+    user.close().await?;
+    Ok(())
+}
+
+pub async fn subscribe_loop(mut receiver: GossipReceiver) -> Result<()> {
+    // init a peerid -> name hashmap
+    let mut usernames = HashMap::new();
+    while let Some(event) = receiver.try_next().await? {
+        if let Event::Gossip(GossipEvent::Received(msg)) = event {
+            let (from, message) = SignedMessage::verify_and_decode(&msg.content)?;
+            match message {
+                Message::AboutMe { username } => {
+                    usernames.insert(from, username.clone());
+                    println!("> {} is now known as {}", from.fmt_short(), username);
+                }
+                Message::SimpleText { text } => {
+                    let username = usernames
+                        .get(&from)
+                        .map_or_else(|| from.fmt_short(), String::to_string);
+                    println!("> {}: {}", username, text);
+                }
+                Message::RequestImg { image_name } => {
+                    let username = usernames
+                        .get(&from)
+                        .map_or_else(|| from.fmt_short(), String::to_string);
+                    println!("> {} rquested image: {}", username, image_name);
+                }
+            }
+        }
+    }
     Ok(())
 }
 
 #[cfg(test)]
 // run test by using: '???'
 mod tests {
+    use super::*;
     use iroh::SecretKey;
     use iroh_gossip::proto::TopicId;
     use rand::{Rng, SeedableRng, rngs::StdRng};
-    use super::*;
 
     #[test]
     // run test by using: 'cargo test get_random_seed -- --exact --nocapture'

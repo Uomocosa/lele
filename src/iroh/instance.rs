@@ -1,16 +1,26 @@
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
-use iroh::{endpoint::{DirectAddrInfo, RemoteInfo}, protocol::Router, Endpoint, NodeAddr, NodeId, PublicKey, RelayUrl, SecretKey};
-use iroh_gossip::{net::{Gossip, GossipTopic}, proto::TopicId};
+use anyhow::{Result, anyhow};
+use iroh::{
+    Endpoint, NodeAddr, NodeId, PublicKey, RelayUrl, SecretKey,
+    endpoint::{DirectAddrInfo, RemoteInfo},
+    protocol::Router,
+};
+use iroh_gossip::{
+    net::{Gossip, GossipTopic},
+    proto::TopicId,
+};
 
 use super::IrohData;
-
 
 #[derive(Debug, Clone)]
 pub enum IrohInstance<T> {
     Empty,
-    Data { iroh_data: IrohData, data: T, debug: bool },
+    Data {
+        iroh_data: IrohData,
+        data: T,
+        debug: bool,
+    },
 }
 
 impl<T> IrohInstance<T> {
@@ -20,8 +30,8 @@ impl<T> IrohInstance<T> {
 
     pub async fn close(self) -> Result<()> {
         match self {
-            IrohInstance::Empty => {},
-            IrohInstance::Data { iroh_data, ..} => {
+            IrohInstance::Empty => {}
+            IrohInstance::Data { iroh_data, .. } => {
                 iroh_data.endpoint.close().await;
                 iroh_data.router.shutdown().await?;
             }
@@ -32,11 +42,13 @@ impl<T> IrohInstance<T> {
 
 impl<T> IrohInstance<T> {
     pub async fn assert_correct_relay(&self) -> Result<()> {
-        let endpoint_relay =  self.endpoint_relay().await?;
+        let endpoint_relay = self.endpoint_relay().await?;
         let relay = self.relay_url();
         match endpoint_relay == relay {
             true => Ok(()),
-            false => Err(anyhow!("instance::assert_correct_relay::EndpointHasDifferentRelay")),
+            false => Err(anyhow!(
+                "instance::assert_correct_relay::EndpointHasDifferentRelay"
+            )),
         }
     }
 }
@@ -81,16 +93,16 @@ impl<T> IrohInstance<T> {
         let node_addr = self.node_addr().await?;
         match node_addr {
             None => Ok(None),
-            Some(node_addr) => Ok(node_addr.relay_url)
+            Some(node_addr) => Ok(node_addr.relay_url),
         }
     }
 
     pub fn add_node_addr(&self, node_addr: NodeAddr) -> Result<()> {
         match self {
             IrohInstance::Empty => return Err(anyhow!("instance::add_node_addr::UserIsEmpty")),
-            IrohInstance::Data { iroh_data , ..} => {
+            IrohInstance::Data { iroh_data, .. } => {
                 iroh_data.endpoint.add_node_addr(node_addr)?;
-            },
+            }
         }
         Ok(())
     }
@@ -98,95 +110,96 @@ impl<T> IrohInstance<T> {
     pub fn subscribe(&self, node_ids: Vec<NodeId>) -> Result<GossipTopic> {
         match self {
             IrohInstance::Empty => Err(anyhow!("instance::subscribe::UserIsEmpty")),
-            IrohInstance::Data { iroh_data , ..} => {
+            IrohInstance::Data { iroh_data, .. } => {
                 Ok(iroh_data.gossip.subscribe(iroh_data.topic_id, node_ids)?)
-            },
+            }
         }
     }
 
     pub async fn subscribe_and_join(&self, node_ids: Vec<NodeId>) -> Result<GossipTopic> {
         match self {
             IrohInstance::Empty => Err(anyhow!("instance::subscribe_and_join::UserIsEmpty")),
-            IrohInstance::Data { iroh_data , ..} => {
-                Ok(iroh_data.gossip.subscribe_and_join(iroh_data.topic_id, node_ids).await?)
-            },
+            IrohInstance::Data { iroh_data, .. } => Ok(iroh_data
+                .gossip
+                .subscribe_and_join(iroh_data.topic_id, node_ids)
+                .await?),
         }
     }
 
     pub fn remote_info_iter(&self) -> Result<impl Iterator<Item = RemoteInfo>> {
         match self {
             IrohInstance::Empty => Err(anyhow!("instance::peers_addrs::UserIsEmpty")),
-            IrohInstance::Data { iroh_data , ..} => {
-                Ok(iroh_data.endpoint.remote_info_iter())
-            },
+            IrohInstance::Data { iroh_data, .. } => Ok(iroh_data.endpoint.remote_info_iter()),
         }
     }
 
     pub fn online_peers(&self) -> Result<HashMap<NodeId, Vec<DirectAddrInfo>>> {
         match self {
             IrohInstance::Empty => Err(anyhow!("instance::peers_addrs::UserIsEmpty")),
-            IrohInstance::Data {..} => {
+            IrohInstance::Data { .. } => {
                 let mut hmap: HashMap<NodeId, Vec<DirectAddrInfo>> = HashMap::new();
                 for info in self.remote_info_iter()? {
-                    if info.latency.is_none() { continue; }
+                    if info.latency.is_none() {
+                        continue;
+                    }
                     hmap.insert(info.node_id, info.addrs);
                 }
                 Ok(hmap)
-            },
+            }
         }
     }
 
     pub fn offline_peers(&self) -> Result<Vec<NodeId>> {
         match self {
             IrohInstance::Empty => Err(anyhow!("instance::peers_addrs::UserIsEmpty")),
-            IrohInstance::Data {..} => {
+            IrohInstance::Data { .. } => {
                 let mut nodeid_vec: Vec<NodeId> = Vec::new();
                 for info in self.remote_info_iter()? {
-                    if info.latency.is_some() { continue; }
+                    if info.latency.is_some() {
+                        continue;
+                    }
                     nodeid_vec.push(info.node_id);
                 }
                 Ok(nodeid_vec)
-            },
+            }
         }
     }
 }
 
-
-
 // standard setters and getters
 impl<T> IrohInstance<T> {
-    pub fn data(&self) -> Option<IrohData> {
+    pub fn iroh_data(&self) -> Option<IrohData> {
         match self {
             IrohInstance::Empty => None,
-            IrohInstance::Data { iroh_data , ..} => Some(iroh_data.clone()),
+            IrohInstance::Data { iroh_data, .. } => Some(iroh_data.clone()),
         }
     }
 
     pub fn endpoint(&self) -> Option<Endpoint> {
         match self {
             IrohInstance::Empty => None,
-            IrohInstance::Data { iroh_data , ..} => Some(iroh_data.endpoint.clone())
+            IrohInstance::Data { iroh_data, .. } => Some(iroh_data.endpoint.clone()),
         }
     }
 
     pub fn gossip(&self) -> Option<Gossip> {
         match self {
             IrohInstance::Empty => None,
-            IrohInstance::Data { iroh_data , ..} => Some(iroh_data.gossip.clone())
+            IrohInstance::Data { iroh_data, .. } => Some(iroh_data.gossip.clone()),
         }
     }
 
     pub fn router(&self) -> Option<Router> {
         match self {
             IrohInstance::Empty => None,
-            IrohInstance::Data { iroh_data , ..} => Some(iroh_data.router.clone())
+            IrohInstance::Data { iroh_data, .. } => Some(iroh_data.router.clone()),
         }
     }
 
     pub fn topic_id(&self) -> Option<TopicId> {
         match self {
             IrohInstance::Empty => None,
-            IrohInstance::Data { iroh_data , ..} => Some(iroh_data.topic_id)
+            IrohInstance::Data { iroh_data, .. } => Some(iroh_data.topic_id),
         }
     }
 
@@ -194,21 +207,21 @@ impl<T> IrohInstance<T> {
         // Get the RelayUrl currently in the IrohData struct //TODO: transform in docs
         match self {
             IrohInstance::Empty => None,
-            IrohInstance::Data { iroh_data , ..} => Some(iroh_data.relay_url.clone())
+            IrohInstance::Data { iroh_data, .. } => Some(iroh_data.relay_url.clone()),
         }
     }
 
     pub fn debug(&self) -> bool {
         match self {
             IrohInstance::Empty => false,
-            IrohInstance::Data { debug , ..} => *debug
+            IrohInstance::Data { debug, .. } => *debug,
         }
     }
 
     pub fn set_endpoint(&mut self, endpoint: Endpoint) -> Result<&mut Self> {
         match self {
             IrohInstance::Empty => return Err(anyhow!("instance::set_endpoint::UserIsEmpty")),
-            IrohInstance::Data { iroh_data , ..} => {
+            IrohInstance::Data { iroh_data, .. } => {
                 iroh_data.endpoint = endpoint;
             }
         }
@@ -218,7 +231,7 @@ impl<T> IrohInstance<T> {
     pub fn set_gossip(&mut self, gossip: Gossip) -> Result<&mut Self> {
         match self {
             IrohInstance::Empty => return Err(anyhow!("instance::set_gossip::UserIsEmpty")),
-            IrohInstance::Data { iroh_data , ..} => {
+            IrohInstance::Data { iroh_data, .. } => {
                 iroh_data.gossip = gossip;
             }
         }
@@ -228,7 +241,7 @@ impl<T> IrohInstance<T> {
     pub fn set_router(&mut self, router: Router) -> Result<&mut Self> {
         match self {
             IrohInstance::Empty => return Err(anyhow!("instance::set_router::UserIsEmpty")),
-            IrohInstance::Data { iroh_data , ..} => {
+            IrohInstance::Data { iroh_data, .. } => {
                 iroh_data.router = router;
             }
         }
@@ -238,7 +251,7 @@ impl<T> IrohInstance<T> {
     pub fn set_topic_id(&mut self, topic_id: TopicId) -> Result<&mut Self> {
         match self {
             IrohInstance::Empty => return Err(anyhow!("instance::set_topic_id::UserIsEmpty")),
-            IrohInstance::Data { iroh_data , ..} => {
+            IrohInstance::Data { iroh_data, .. } => {
                 iroh_data.topic_id = topic_id;
             }
         }
@@ -248,7 +261,7 @@ impl<T> IrohInstance<T> {
     pub fn set_relay_url(&mut self, relay_url: RelayUrl) -> Result<&mut Self> {
         match self {
             IrohInstance::Empty => return Err(anyhow!("instance::set_relay_url::UserIsEmpty")),
-            IrohInstance::Data { iroh_data , ..} => {
+            IrohInstance::Data { iroh_data, .. } => {
                 iroh_data.relay_url = relay_url;
             }
         }
@@ -258,7 +271,7 @@ impl<T> IrohInstance<T> {
     pub fn set_debug(&mut self, debug: bool) -> Result<&mut Self> {
         match self {
             IrohInstance::Empty => return Err(anyhow!("instance::set_debug::UserIsEmpty")),
-            IrohInstance::Data { debug: debug_ , ..} => {
+            IrohInstance::Data { debug: debug_, .. } => {
                 *debug_ = debug;
             }
         }
