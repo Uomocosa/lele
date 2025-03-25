@@ -9,6 +9,8 @@ pub enum Message {
     AboutMe { username: String },
     SimpleText { text: String },
     RequestImg { image_name: String },
+    RequestNodeId,
+    SendNodeId,
     // RequestImg {image_name: String},
 }
 

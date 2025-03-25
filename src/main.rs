@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use iroh::SecretKey;
+use iroh::{PublicKey, SecretKey};
 use iroh_gossip::net::{Event, GossipEvent, GossipReceiver, GossipSender};
 use lele::iroh::{
     User, connect,
@@ -12,7 +12,8 @@ use lele::iroh::{
 };
 use n0_future::TryStreamExt;
 
-struct Sender {
+#[derive(Debug, Clone)]
+pub struct Sender {
     // user: &'a User,
     secret_key: SecretKey,
     gossip_sender: GossipSender,
@@ -51,7 +52,7 @@ async fn main() -> Result<()> {
     let sender = Sender::create(&user, gossip_sender)?;
 
     sender.broadcast(&Message::about_me(&user)?).await?;
-    tokio::spawn(async move { subscribe_loop(receiver).await });
+    tokio::spawn(async move { user_loop(sender.clone(), receiver).await });
 
     println!("> finished [{:?}]", start.elapsed());
     tokio::time::sleep(Duration::from_millis(250)).await;
@@ -65,27 +66,29 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-pub async fn subscribe_loop(mut receiver: GossipReceiver) -> Result<()> {
-    let mut usernames = HashMap::new();
+pub async fn user_loop(sender: Sender, mut receiver: GossipReceiver) -> Result<()> {
+    let mut usernames: HashMap<_, _> = HashMap::new();
+    let name = |from: &PublicKey, hmap: &HashMap<_, _>| {
+        hmap.get(from).map_or_else(|| from.fmt_short(), String::to_string)
+    };
     while let Some(event) = receiver.try_next().await? {
         if let Event::Gossip(GossipEvent::Received(msg)) = event {
             let (from, message) = SignedMessage::verify_and_decode(&msg.content)?;
             match message {
                 Message::AboutMe { username } => {
                     usernames.insert(from, username.clone());
-                    println!("> {} is now known as {}", from.fmt_short(), username);
+                    println!("> {} is now known as {}", from.fmt_short(), name(&from, &usernames));
                 }
                 Message::SimpleText { text } => {
-                    let username = usernames
-                        .get(&from)
-                        .map_or_else(|| from.fmt_short(), String::to_string);
-                    println!("> {}: {}", username, text);
+                    println!("> {}: {}", name(&from, &usernames), text);
                 }
                 Message::RequestImg { image_name } => {
-                    let username = usernames
-                        .get(&from)
-                        .map_or_else(|| from.fmt_short(), String::to_string);
-                    println!("> {} rquested image: {}", username, image_name);
+                    println!("> {} rquested image: {}", name(&from, &usernames), image_name);
+                }
+                Message::SendNodeId => {}
+                Message::RequestNodeId => {
+                    sender.broadcast(&Message::SendNodeId).await?;
+                    println!("> {} requested node id, sending Message::SendNodeId", name(&from, &usernames));
                 }
             }
         }

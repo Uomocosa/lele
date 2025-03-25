@@ -156,7 +156,7 @@ impl User {
         Ok(user_handle)
     }
 
-    pub async fn is_any_other_user_online(&self, relay_vec: &[&str], seed: &[u8; 32]) -> Result<bool> {
+    pub async fn users_online(&self, relay_vec: &[&str], seed: &[u8; 32]) -> Result<Vec<NodeId>> {
         let mut peer_ids: Vec<NodeId> = self.online_peers()?.keys().cloned().collect();
         let server_ids: Vec<u64> = (0..100).collect();
         let only_server_ids: Vec<NodeId> = get_server_addresses(&server_ids, relay_vec, seed)
@@ -169,8 +169,12 @@ impl User {
         peer_ids.retain(|peer| !only_server_ids.contains(peer));
         if self.debug() { println!("> 'non-server' peer_ids: {:?}", peer_ids); }
         if self.debug() { println!("> user.node_id(): {:?}", self.node_id()); }
+        Ok(peer_ids)
+    }
 
-        Ok(peer_ids.is_empty())
+    pub async fn is_any_other_user_online(&self, relay_vec: &[&str], seed: &[u8; 32]) -> Result<bool> {
+        let users_vec = self.users_online(relay_vec, seed).await?;
+        Ok(!users_vec.is_empty())
     }
 }
 
