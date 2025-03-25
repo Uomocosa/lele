@@ -46,7 +46,7 @@ impl User {
         })
     }
 
-    pub async fn random(topic_id: TopicId) -> Result<Self> {
+    pub async fn random_with_topic(topic_id: TopicId) -> Result<Self> {
         let secret_key = SecretKey::generate(rand::rngs::OsRng);
         // let topic_id = TopicId::from_bytes(rand::random());
         let endpoint = Endpoint::builder().secret_key(secret_key).bind().await?;
@@ -74,6 +74,35 @@ impl User {
             debug: false,
         })
     }
+
+    // pub async fn random() -> Result<Self> {
+    //     let secret_key = SecretKey::generate(rand::rngs::OsRng);
+    //     // let topic_id = TopicId::from_bytes(rand::random());
+    //     let endpoint = Endpoint::builder().secret_key(secret_key).bind().await?;
+    //     let gossip = Gossip::builder().spawn(endpoint.clone()).await?;
+    //     let router = Router::builder(endpoint.clone())
+    //         .accept(iroh_gossip::ALPN, gossip.clone())
+    //         .spawn()
+    //         .await?;
+    //     let relay_url = match endpoint.node_addr().await?.relay_url {
+    //         None => return Err(anyhow!("user::random::NoRelayUrlFound")),
+    //         Some(relay_url) => relay_url,
+    //     };
+    //     let iroh_data = IrohData {
+    //         endpoint,
+    //         gossip,
+    //         router,
+    //         topic_id,
+    //         relay_url,
+    //     };
+    //     let name = "user_".to_string() + &random_string(7);
+    //     let data = UserData { name };
+    //     Ok(User::Data {
+    //         iroh_data,
+    //         data,
+    //         debug: false,
+    //     })
+    // }
 }
 
 // Useful methods
@@ -200,7 +229,7 @@ mod tests {
 
         // User side
         println!("> creating user ...");
-        let mut user = User::random(topic_id).await?;
+        let mut user = User::random_with_topic(topic_id).await?;
         user.set_debug(true)?;
         let id_vec: Vec<u64> = (0..10).collect();
         let server_addrs = get_server_addresses(&id_vec, RELAY_VEC, &SEED).await?;
@@ -240,7 +269,7 @@ mod tests {
 
         // User side
         println!("> creating user ...");
-        let mut user = User::random(topic_id).await?;
+        let mut user = User::random_with_topic(topic_id).await?;
         user.set_debug(true)?;
         let id_vec: Vec<u64> = vec![id];
         let server_addrs = get_server_addresses(&id_vec, RELAY_VEC, &SEED).await?;

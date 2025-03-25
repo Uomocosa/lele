@@ -47,49 +47,16 @@ async fn main() -> Result<()> {
     let start = Instant::now();
 
     let (user, server, user_gtopic) = connect().await?;
-    let (gossip_sender, mut receiver) = user_gtopic.split();
+    let (gossip_sender, receiver) = user_gtopic.split();
     let sender = Sender::create(&user, gossip_sender)?;
-    let message = Message::SimpleText {
-        text: "Hello!".to_string(),
-    };
-    sender.broadcast(&message).await?;
-    println!("> sent: Hello!");
-    // sender.broadcast(encoded_message).await?;
-
-    tokio::spawn(async move {
-        let mut usernames = HashMap::new();
-        while let Some(event) = receiver.try_next().await? {
-            if let Event::Gossip(GossipEvent::Received(msg)) = event {
-                let (from, message) = SignedMessage::verify_and_decode(&msg.content)?;
-                match message {
-                    Message::AboutMe { username } => {
-                        usernames.insert(from, username.clone());
-                        println!("> {} is now known as {}", from.fmt_short(), username);
-                    }
-                    Message::SimpleText { text } => {
-                        let username = usernames
-                            .get(&from)
-                            .map_or_else(|| from.fmt_short(), String::to_string);
-                        println!("> {}: {}", username, text);
-                    }
-                    Message::RequestImg { image_name } => {
-                        let username = usernames
-                            .get(&from)
-                            .map_or_else(|| from.fmt_short(), String::to_string);
-                        println!("> {} rquested image: {}", username, image_name);
-                    }
-                }
-            }
-        }
-        anyhow::Ok(())
-    });
-
+    
+    sender.broadcast(&Message::about_me(&user)?).await?;
+    tokio::spawn(async move { subscribe_loop(receiver).await });
+    
     println!("> finished [{:?}]", start.elapsed());
     tokio::time::sleep(Duration::from_millis(250)).await;
     println!("> press Ctrl+C to exit.");
     tokio::signal::ctrl_c().await?;
-    sender.broadcast(&message).await?;
-    println!("> sent: Hello! (again)");
     println!("> online_peers:\n{:?}", user.online_peers()?.keys());
     println!("> closing server ...");
     server.close().await?;
@@ -99,7 +66,6 @@ async fn main() -> Result<()> {
 }
 
 pub async fn subscribe_loop(mut receiver: GossipReceiver) -> Result<()> {
-    // init a peerid -> name hashmap
     let mut usernames = HashMap::new();
     while let Some(event) = receiver.try_next().await? {
         if let Event::Gossip(GossipEvent::Received(msg)) = event {
