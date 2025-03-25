@@ -49,10 +49,10 @@ async fn main() -> Result<()> {
     let (user, server, user_gtopic) = connect().await?;
     let (gossip_sender, receiver) = user_gtopic.split();
     let sender = Sender::create(&user, gossip_sender)?;
-    
+
     sender.broadcast(&Message::about_me(&user)?).await?;
     tokio::spawn(async move { subscribe_loop(receiver).await });
-    
+
     println!("> finished [{:?}]", start.elapsed());
     tokio::time::sleep(Duration::from_millis(250)).await;
     println!("> press Ctrl+C to exit.");

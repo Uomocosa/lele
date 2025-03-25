@@ -1,11 +1,17 @@
 use std::{
-    collections::HashMap, io::{self, Write}, str::FromStr, time::{Duration, Instant}
+    collections::HashMap,
+    io::{self, Write},
+    str::FromStr,
+    time::{Duration, Instant},
 };
 
 use anyhow::Result;
-use futures::{future::BoxFuture, FutureExt};
+use futures::{FutureExt, future::BoxFuture};
 use iroh::{Endpoint, NodeAddr, NodeId, RelayUrl};
-use iroh_gossip::{net::{Event, GossipEvent, GossipReceiver, GossipTopic}, proto::TopicId};
+use iroh_gossip::{
+    net::{Event, GossipEvent, GossipReceiver, GossipTopic},
+    proto::TopicId,
+};
 use n0_future::TryStreamExt;
 use tokio::task::JoinHandle;
 // use std::pin::Pin;
@@ -17,15 +23,30 @@ const DEBUG: bool = false;
 
 use super::{Server, User, get_server_addresses};
 
-
-
-#[rustfmt::fn_single_line]
-pub async fn connect() -> Result<(User, Server, GossipTopic)> {
-    connect_init().await
+#[rustfmt::skip]
+pub fn connect() -> BoxFuture<'static, Result<(User, Server, GossipTopic)>> {
+    async move {
+        let (user, server, gossip_topic) = connect_init().await?;
+        
+        let random_number: u64 = rand::random();
+        let radom_sleep_secs = random_number % 26; // sleep from 0 to 25 secs
+        println!("> radom_sleep_secs: {radom_sleep_secs}");
+        // There might be another user that lunched the software at the same time as us.
+        let timer = Instant::now();
+        while !user.is_any_other_user_online(RELAY_VEC, &SEED).await? {
+            if timer.elapsed() < Duration::from_secs(radom_sleep_secs) { 
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                continue; 
+            }
+            user.close().await?; println!("> closing user ...");
+            server.close().await?; println!("> closing server ...");
+            return connect().await;
+        }
+        Ok((user, server, gossip_topic)) 
+    }.boxed()
 }
 
-
-#[rustfmt::fn_single_line]
+#[rustfmt::skip]
 fn connect_init() -> BoxFuture<'static, Result<(User, Server, GossipTopic)>> {
     async move {
         let topic_id = TopicId::from_str(TOPIC)?;
@@ -116,12 +137,16 @@ fn connect_init() -> BoxFuture<'static, Result<(User, Server, GossipTopic)>> {
             if DEBUG { println!("> online_peers:\n{:?}", user.online_peers()?.keys()); }
             Ok((user, server, user_gtopic))
         } else {
-            connect().await
+            println!("> closing server ...");
+            server.close().await?;
+            println!("> closing user ...");
+            user.close().await?;
+            connect_init().await
         }
     }.boxed()
 }
 
-#[rustfmt::fn_single_line]
+#[rustfmt::skip]
 async fn server_loop(mut receiver: GossipReceiver, endpoint_clone: Endpoint) -> Result<()> {
     while let Some(event) = receiver.try_next().await? {
         if let Event::Gossip(GossipEvent::NeighborUp(node_id)) = event {
@@ -136,13 +161,15 @@ async fn server_loop(mut receiver: GossipReceiver, endpoint_clone: Endpoint) -> 
     Ok(())
 }
 
-
 #[tokio::test]
 // run test by using: 'cargo test iroh::connect::test_connect -- --exact --nocapture'
 async fn test_connect() -> Result<()> {
     let (user, server, gossip_topic) = connect().await?;
     println!("> user.online_peers(), {:#?}", user.online_peers());
     println!("> server.online_peers(), {:#?}", server.online_peers());
-    println!("> gossip_topic.is_joined(), {:#?}", gossip_topic.is_joined());
+    println!(
+        "> gossip_topic.is_joined(), {:#?}",
+        gossip_topic.is_joined()
+    );
     Ok(())
 }

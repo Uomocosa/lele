@@ -1,4 +1,4 @@
-use crate::string::random_string;
+use crate::{iroh::get_server_addresses, string::random_string};
 use anyhow::{Ok, Result, anyhow};
 use iroh::{Endpoint, NodeAddr, NodeId, RelayUrl, SecretKey, protocol::Router};
 use iroh_gossip::{
@@ -154,6 +154,23 @@ impl User {
             anyhow::Ok(user_gtopic)
         });
         Ok(user_handle)
+    }
+
+    pub async fn is_any_other_user_online(&self, relay_vec: &[&str], seed: &[u8; 32]) -> Result<bool> {
+        let mut peer_ids: Vec<NodeId> = self.online_peers()?.keys().cloned().collect();
+        let server_ids: Vec<u64> = (0..100).collect();
+        let only_server_ids: Vec<NodeId> = get_server_addresses(&server_ids, relay_vec, seed)
+            .await?
+            .iter()
+            .map(|addr| addr.node_id)
+            .collect();
+        if self.debug() { println!("> 'all' peer_ids: {:?}", peer_ids); }
+
+        peer_ids.retain(|peer| !only_server_ids.contains(peer));
+        if self.debug() { println!("> 'non-server' peer_ids: {:?}", peer_ids); }
+        if self.debug() { println!("> user.node_id(): {:?}", self.node_id()); }
+
+        Ok(peer_ids.is_empty())
     }
 }
 
