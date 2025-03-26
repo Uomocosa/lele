@@ -1,4 +1,3 @@
-mod connect;
 mod data;
 mod generate_server_secret_key;
 mod get_server_addr;
@@ -8,7 +7,6 @@ mod server;
 mod user;
 mod connection;
 
-pub use connect::connect;
 pub use data::IrohData;
 pub use generate_server_secret_key::generate_server_secret_key;
 pub use get_server_addr::get_server_addr;

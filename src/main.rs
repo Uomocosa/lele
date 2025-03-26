@@ -48,7 +48,9 @@ async fn main() -> Result<()> {
     let options = ConnectOptions { debug: true, ..Default::default()};
     let topic_id = TopicId::from_str(TOPIC)?;
     let connection = Connection::create_with_opts(topic_id, RELAY_VEC, &SEED, options).await?;
-    let (user,server, user_gtopic) = (connection.user, connection.server, connection.user_gossip_topic);
+    let user = connection.user;
+    let server = connection.server;
+    let user_gtopic = connection.user_gossip_topic;
     
     let (gossip_sender, receiver) = user_gtopic.split();
     let sender = Sender::create(&user, gossip_sender)?;

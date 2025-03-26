@@ -223,14 +223,20 @@ mod tests {
     use super::*;
     use crate::{
         consts::{RELAY_VEC, SEED, TOPIC},
-        iroh::{Server, connect, get_server_addresses},
+        iroh::{get_server_addresses, ConnectOptions, Connection, Server},
     };
 
     #[tokio::test]
     // run test by using: 'cargo test iroh::user::tests::subscribe_to_node_addreses -- --exact --nocapture'
     async fn connect_and_boradcast() -> Result<()> {
         tracing_subscriber::fmt::init();
-        let (user, server, user_gtopic) = connect().await?;
+        let options = ConnectOptions { debug: true, ..Default::default()};
+        let topic_id = TopicId::from_str(TOPIC)?;
+        let connection = Connection::create_with_opts(topic_id, RELAY_VEC, &SEED, options).await?;
+        let user = connection.user;
+        let server = connection.server;
+        let user_gtopic = connection.user_gossip_topic;
+
         let (sender, _receiver) = user_gtopic.split();
         sender.broadcast(Bytes::from("Hello!")).await?;
 
