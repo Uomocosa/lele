@@ -1,15 +1,13 @@
 use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
+    collections::HashMap, str::FromStr, time::{Duration, Instant}
 };
 
 use anyhow::{Result, anyhow};
 use iroh::{PublicKey, SecretKey};
-use iroh_gossip::net::{Event, GossipEvent, GossipReceiver, GossipSender};
-use lele::iroh::{
-    User, connect,
-    gossip::{Message, SignedMessage},
-};
+use iroh_gossip::{net::{Event, GossipEvent, GossipReceiver, GossipSender}, proto::TopicId};
+use lele::{consts::{RELAY_VEC, SEED, TOPIC}, iroh::{
+    gossip::{Message, SignedMessage}, ConnectOptions, Connection, User
+}};
 use n0_future::TryStreamExt;
 
 #[derive(Debug, Clone)]
@@ -47,7 +45,11 @@ async fn main() -> Result<()> {
     // tracing_subscriber::fmt::init();
     let start = Instant::now();
 
-    let (user, server, user_gtopic) = connect().await?;
+    let options = ConnectOptions { debug: true, ..Default::default()};
+    let topic_id = TopicId::from_str(TOPIC)?;
+    let connection = Connection::create_with_opts(topic_id, RELAY_VEC, &SEED, options).await?;
+    let (user,server, user_gtopic) = (connection.user, connection.server, connection.user_gossip_topic);
+    
     let (gossip_sender, receiver) = user_gtopic.split();
     let sender = Sender::create(&user, gossip_sender)?;
 
