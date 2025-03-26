@@ -7,7 +7,7 @@ use super::get_server_addr;
 
 pub async fn get_server_addresses(
     id_vec: &[u64],
-    relay_vec: &[&str],
+    relay_vec: &[String],
     seed: &[u8; 32],
 ) -> Result<Vec<NodeAddr>> {
     let mut addresses: Vec<NodeAddr> = Vec::new();

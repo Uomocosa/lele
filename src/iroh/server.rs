@@ -41,6 +41,17 @@ impl Server {
     }
 }
 
+
+impl Server {
+    pub fn id(&self) -> Option<u64> {
+        match self {
+            IrohInstance::Empty => None,
+            IrohInstance::Data { data, .. } => Some(data.id),
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

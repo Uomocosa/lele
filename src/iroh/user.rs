@@ -5,7 +5,7 @@ use iroh_gossip::{
     net::{Gossip, GossipTopic},
     proto::TopicId,
 };
-use tokio::task::JoinHandle;
+// use tokio::task::JoinHandle;
 
 use super::{IrohData, IrohInstance};
 
@@ -15,6 +15,7 @@ pub struct UserData {
 }
 
 pub type User = IrohInstance<UserData>;
+pub type GossipFuture = tokio::task::JoinHandle<anyhow::Result<GossipTopic>>;
 
 impl User {
     pub async fn create(
@@ -44,6 +45,21 @@ impl User {
             data,
             debug: false,
         })
+    }
+
+    pub async fn recreate(self) -> Result<Self> {
+        match self {
+            IrohInstance::Empty => Ok(self),
+            IrohInstance::Data{iroh_data, data, debug} => {
+                let secret_key = iroh_data.endpoint.secret_key().clone();
+                let topic_id = iroh_data.topic_id;
+                let relay_url = iroh_data.relay_url;
+                let name = &data.name;
+                let mut new_user = User::create(secret_key, topic_id, relay_url, name).await?;
+                new_user.set_debug(debug)?;
+                Ok(new_user)
+            }
+        }
     }
 
     pub async fn random_with_topic(topic_id: TopicId) -> Result<Self> {
@@ -134,7 +150,7 @@ impl User {
     pub async fn connect_to_servers(
         &self,
         server_addrs: Vec<NodeAddr>,
-    ) -> Result<JoinHandle<Result<GossipTopic>>> {
+    ) -> Result<GossipFuture> {
         self.add_node_addresses(&server_addrs).await?;
         let iroh_data_clone = match self.iroh_data().clone() {
             None => return Err(anyhow!("user::connect_to_servers::NoIrohDataFound")),
@@ -142,15 +158,14 @@ impl User {
         };
         let node_ids: Vec<NodeId> = server_addrs.iter().map(|addr| addr.node_id).collect();
         let (debug, name) = (self.debug(), self.name().unwrap());
-        let user_handle: JoinHandle<Result<GossipTopic>> = tokio::spawn(async move {
+        let user_handle: GossipFuture = tokio::spawn(async move {
+            if debug { println!("> {name}: connecting to servers ...");  }
             let user_gtopic = iroh_data_clone
                 .gossip
                 .subscribe_and_join(iroh_data_clone.topic_id, node_ids)
                 .await?;
             // let user_gtopic = user_clone.subscribe_and_join(node_ids).await?;
-            if debug {
-                println!("> {name}: connected!");
-            }
+            if debug { println!("> {name}: connected!"); }
             anyhow::Ok(user_gtopic)
         });
         Ok(user_handle)
@@ -159,7 +174,8 @@ impl User {
     pub async fn users_online(&self, relay_vec: &[&str], seed: &[u8; 32]) -> Result<Vec<NodeId>> {
         let mut peer_ids: Vec<NodeId> = self.online_peers()?.keys().cloned().collect();
         let server_ids: Vec<u64> = (0..100).collect();
-        let only_server_ids: Vec<NodeId> = get_server_addresses(&server_ids, relay_vec, seed)
+        let relay_vec: Vec<String> = relay_vec.iter().map(|s| s.to_string()).collect();
+        let only_server_ids: Vec<NodeId> = get_server_addresses(&server_ids, &relay_vec, seed)
             .await?
             .iter()
             .map(|addr| addr.node_id)
@@ -252,7 +268,8 @@ mod tests {
         let mut user = User::random_with_topic(topic_id).await?;
         user.set_debug(true)?;
         let id_vec: Vec<u64> = (0..10).collect();
-        let server_addrs = get_server_addresses(&id_vec, RELAY_VEC, &SEED).await?;
+        let relay_vec: Vec<String> = RELAY_VEC.iter().map(|s| s.to_string()).collect();
+        let server_addrs = get_server_addresses(&id_vec, &relay_vec, &SEED).await?;
         // println!("> server_addrs:\n{:#?}", server_addrs);
         user.add_node_addresses(&server_addrs).await?;
         let node_ids: Vec<NodeId> = server_addrs.iter().map(|addr| addr.node_id).collect();
@@ -292,7 +309,8 @@ mod tests {
         let mut user = User::random_with_topic(topic_id).await?;
         user.set_debug(true)?;
         let id_vec: Vec<u64> = vec![id];
-        let server_addrs = get_server_addresses(&id_vec, RELAY_VEC, &SEED).await?;
+        let relay_vec: Vec<String> = RELAY_VEC.iter().map(|s| s.to_string()).collect();
+        let server_addrs = get_server_addresses(&id_vec, &relay_vec, &SEED).await?;
         let user_handle = user.connect_to_servers(server_addrs).await?;
         let user_gtopic = user_handle.await??;
         let (sender, _receiver) = user_gtopic.split();

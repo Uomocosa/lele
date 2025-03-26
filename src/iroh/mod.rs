@@ -6,6 +6,7 @@ mod get_server_addresses;
 mod instance;
 mod server;
 mod user;
+mod connection;
 
 pub use connect::connect;
 pub use data::IrohData;
@@ -14,6 +15,9 @@ pub use get_server_addr::get_server_addr;
 pub use get_server_addresses::get_server_addresses;
 pub use instance::IrohInstance;
 pub use server::Server;
-pub use user::User;
+pub use user::User as User;
+pub use user::GossipFuture as GossipFuture;
+pub use connection::ConnectOptions as ConnectOptions;
+pub use connection::Connection as Connection;
 
 pub mod gossip;
