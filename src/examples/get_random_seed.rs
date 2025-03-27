@@ -9,6 +9,6 @@ use rand::Rng;
 fn run() -> Result<()> {
     let mut rng = rand::thread_rng();
     let random_seed: [u8; 32] = std::array::from_fn(|_| rng.r#gen());
-    println!("const SEED: [u8; 32] = {:?};", random_seed);
+    println!("\npub const SEED: [u8; 32] = {:?};\n", random_seed);
     Ok(())
 }

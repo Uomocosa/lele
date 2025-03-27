@@ -1,6 +1,9 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+// IMPORTANT! Change the consts.rs file.
+// read it and generate a new topic and seed!
+
 use std::{
     str::FromStr,
     time::{Duration, Instant},

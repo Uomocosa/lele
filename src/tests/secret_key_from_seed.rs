@@ -7,8 +7,8 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 
 
 #[test]
-// run test by using: 'cargo test examples::secret_key_from_seed::run -- --exact --nocapture'
-fn run() -> Result<()> {
+// run test by using: 'cargo test tests::secret_key_from_seed::test -- --exact --nocapture'
+fn test() -> Result<()> {
     let mut seed = [0u8; 32]; // Create new array with 32 elements
     let mut rng = rand::thread_rng();
     let random_seed: [u8; 28] = std::array::from_fn(|_| rng.r#gen());

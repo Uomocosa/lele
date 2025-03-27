@@ -1,4 +1,5 @@
 pub mod examples;
+pub mod tests;
 pub mod iroh;
 pub mod string;
 // Automatic imports (from build.rs)
