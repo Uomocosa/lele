@@ -24,7 +24,24 @@ impl User {
         relay_url: RelayUrl,
         name: &str,
     ) -> Result<Self> {
-        let endpoint = Endpoint::builder().secret_key(secret_key).bind().await?;
+        // Maybe in the future I'll add a proper discovery mechanism.
+        // I would also like to integrate the Dht discovery mechanism.
+        // let discovery = ConcurrentDiscovery::from_services(vec![
+        //     Box::new(PkarrPublisher::n0_dns(secret_key.clone())),
+        //     Box::new(DnsDiscovery::n0_dns()),
+        //     Box::new(dht),
+        //     Box::new(LocalSwarmDiscovery::new(secret_key.public())?),
+        // ]);
+        // let endpoint = Endpoint::builder()
+        //     .secret_key(secret_key)
+        //     .discovery(Box::new(discovery))
+        //     .bind()
+        //     .await?;
+        let endpoint = Endpoint::builder()
+            .secret_key(secret_key)
+            .discovery_local_network()
+            .bind()
+            .await?;
         let gossip = Gossip::builder().spawn(endpoint.clone()).await?;
         let router = Router::builder(endpoint.clone())
             .accept(iroh_gossip::ALPN, gossip.clone())
