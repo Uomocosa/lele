@@ -1,4 +1,4 @@
-pub mod __tests__;
+pub mod examples;
 pub mod iroh;
 pub mod string;
 // Automatic imports (from build.rs)

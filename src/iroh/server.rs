@@ -41,7 +41,6 @@ impl Server {
     }
 }
 
-
 impl Server {
     pub fn id(&self) -> Option<u64> {
         match self {
@@ -50,7 +49,6 @@ impl Server {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

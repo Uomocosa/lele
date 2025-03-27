@@ -5,7 +5,7 @@ use iroh::{NodeAddr, RelayUrl};
 
 use super::get_server_addr;
 
-pub async fn get_server_addresses(
+pub fn get_server_addresses(
     id_vec: &[u64],
     relay_vec: &[String],
     seed: &[u8; 32],
@@ -14,7 +14,7 @@ pub async fn get_server_addresses(
     for &id in id_vec {
         for relay_str in relay_vec {
             let relay_url = RelayUrl::from_str(relay_str)?;
-            let server_addr = get_server_addr(id, relay_url, seed).await;
+            let server_addr = get_server_addr(id, relay_url, seed);
             addresses.push(server_addr);
         }
     }

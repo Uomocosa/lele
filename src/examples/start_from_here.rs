@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use std::{
     str::FromStr,
     time::{Duration, Instant},
@@ -9,48 +12,19 @@ use iroh_gossip::{
     net::{Event, GossipEvent, GossipReceiver, GossipSender, GossipTopic},
     proto::TopicId,
 };
-use lele::{
+use crate::{
     consts::{RELAY_VEC, SEED, TOPIC},
     iroh::{
-        gossip::{Message, SignedMessage}, ConnectOptions, Connection, ServerFuture, User
+        gossip::{Message, Sender, SignedMessage}, ConnectOptions, Connection, ServerFuture, User
     },
 };
 use n0_future::TryStreamExt;
 
-#[derive(Debug, Clone)]
-pub struct Sender {
-    // user: &'a User,
-    secret_key: SecretKey,
-    gossip_sender: GossipSender,
-}
-
-impl Sender {
-    pub fn create(user: &User, gossip_sender: GossipSender) -> Result<Self> {
-        match user {
-            User::Empty => return Err(anyhow!("todo::create::UserIsEmpty")),
-            User::Data { .. } => {}
-        }
-        let secret_key = match user.secret_key()? {
-            None => return Err(anyhow!("todo::broadcast::SecretKeyNotFound")),
-            Some(secret_key) => secret_key,
-        };
-        Ok(Sender {
-            secret_key,
-            gossip_sender,
-        })
-    }
-
-    pub async fn broadcast(&self, message: &Message) -> Result<()> {
-        let encoded_message = SignedMessage::sign_and_encode(&self.secret_key, message)?;
-        self.gossip_sender.broadcast(encoded_message).await?;
-        Ok(())
-    }
-}
-
 const DEBUG: bool = false;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+#[tokio::test]
+// run test by using: 'cargo test examples::start_from_here::example -- --exact --nocapture'
+async fn example() -> Result<()> {
     // tracing_subscriber::fmt::init();
     let start = Instant::now();
 
@@ -66,10 +40,13 @@ async fn main() -> Result<()> {
 
     let (gossip_sender, receiver) = user_gtopic.split();
     let sender = Sender::create(&user, gossip_sender)?;
+    let sender_clone = sender.clone();
+    tokio::spawn(async move { user_loop(sender_clone, receiver).await });
 
+    /* Do somenthing with sender, like: */
     sender.broadcast(&Message::about_me(&user)?).await?;
-    tokio::spawn(async move { user_loop(sender.clone(), receiver).await });
 
+    // Close everything
     println!("> finished [{:?}]", start.elapsed());
     tokio::time::sleep(Duration::from_millis(250)).await;
     println!("> press Ctrl+C to exit.");
@@ -82,6 +59,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+// This is important, it defines how your app respond to each received Message.
+// To add new messages change the message.rs file.
 pub async fn user_loop(sender: Sender, mut receiver: GossipReceiver) -> Result<()> {
     while let Some(event) = receiver.try_next().await? {
         if let Event::Gossip(GossipEvent::Received(msg)) = event {
@@ -100,6 +79,7 @@ pub async fn user_loop(sender: Sender, mut receiver: GossipReceiver) -> Result<(
                         from.fmt_short(),
                         image_name
                     );
+                    /* Here you could use iroh-blobs to send the requested image if you have it */
                 }
             }
         }

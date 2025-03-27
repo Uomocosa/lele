@@ -50,7 +50,11 @@ impl User {
     pub async fn recreate(self) -> Result<Self> {
         match self {
             IrohInstance::Empty => Ok(self),
-            IrohInstance::Data{iroh_data, data, debug} => {
+            IrohInstance::Data {
+                iroh_data,
+                data,
+                debug,
+            } => {
                 let secret_key = iroh_data.endpoint.secret_key().clone();
                 let topic_id = iroh_data.topic_id;
                 let relay_url = iroh_data.relay_url;
@@ -147,10 +151,7 @@ impl User {
         Ok(())
     }
 
-    pub async fn connect_to_servers(
-        &self,
-        server_addrs: Vec<NodeAddr>,
-    ) -> Result<GossipFuture> {
+    pub async fn connect_to_servers(&self, server_addrs: Vec<NodeAddr>) -> Result<GossipFuture> {
         self.add_node_addresses(&server_addrs).await?;
         let iroh_data_clone = match self.iroh_data().clone() {
             None => return Err(anyhow!("user::connect_to_servers::NoIrohDataFound")),
@@ -159,13 +160,17 @@ impl User {
         let node_ids: Vec<NodeId> = server_addrs.iter().map(|addr| addr.node_id).collect();
         let (debug, name) = (self.debug(), self.name().unwrap());
         let user_handle: GossipFuture = tokio::spawn(async move {
-            if debug { println!("> {name}: connecting to servers ...");  }
+            if debug {
+                println!("> {name}: connecting to servers ...");
+            }
             let user_gtopic = iroh_data_clone
                 .gossip
                 .subscribe_and_join(iroh_data_clone.topic_id, node_ids)
                 .await?;
             // let user_gtopic = user_clone.subscribe_and_join(node_ids).await?;
-            if debug { println!("> {name}: connected!"); }
+            if debug {
+                println!("> {name}: connected!");
+            }
             anyhow::Ok(user_gtopic)
         });
         Ok(user_handle)
@@ -175,20 +180,29 @@ impl User {
         let mut peer_ids: Vec<NodeId> = self.online_peers()?.keys().cloned().collect();
         let server_ids: Vec<u64> = (0..100).collect();
         let relay_vec: Vec<String> = relay_vec.iter().map(|s| s.to_string()).collect();
-        let only_server_ids: Vec<NodeId> = get_server_addresses(&server_ids, &relay_vec, seed)
-            .await?
+        let only_server_ids: Vec<NodeId> = get_server_addresses(&server_ids, &relay_vec, seed)?
             .iter()
             .map(|addr| addr.node_id)
             .collect();
-        if self.debug() { println!("> 'all' peer_ids: {:?}", peer_ids); }
+        if self.debug() {
+            println!("> 'all' peer_ids: {:?}", peer_ids);
+        }
 
         peer_ids.retain(|peer| !only_server_ids.contains(peer));
-        if self.debug() { println!("> 'non-server' peer_ids: {:?}", peer_ids); }
-        if self.debug() { println!("> user.node_id(): {:?}", self.node_id()); }
+        if self.debug() {
+            println!("> 'non-server' peer_ids: {:?}", peer_ids);
+        }
+        if self.debug() {
+            println!("> user.node_id(): {:?}", self.node_id());
+        }
         Ok(peer_ids)
     }
 
-    pub async fn is_any_other_user_online(&self, relay_vec: &[&str], seed: &[u8; 32]) -> Result<bool> {
+    pub async fn is_any_other_user_online(
+        &self,
+        relay_vec: &[&str],
+        seed: &[u8; 32],
+    ) -> Result<bool> {
         let users_vec = self.users_online(relay_vec, seed).await?;
         Ok(!users_vec.is_empty())
     }
@@ -223,18 +237,21 @@ mod tests {
     use super::*;
     use crate::{
         consts::{RELAY_VEC, SEED, TOPIC},
-        iroh::{get_server_addresses, ConnectOptions, Connection, Server},
+        iroh::{ConnectOptions, Connection, Server, get_server_addresses},
     };
 
     #[tokio::test]
     // run test by using: 'cargo test iroh::user::tests::subscribe_to_node_addreses -- --exact --nocapture'
     async fn connect_and_boradcast() -> Result<()> {
         tracing_subscriber::fmt::init();
-        let options = ConnectOptions { debug: true, ..Default::default()};
+        let options = ConnectOptions {
+            debug: true,
+            ..Default::default()
+        };
         let topic_id = TopicId::from_str(TOPIC)?;
         let connection = Connection::create_with_opts(topic_id, RELAY_VEC, &SEED, options).await?;
         let user = connection.user;
-        let server = connection.server;
+        let server_future = connection.server_future;
         let user_gtopic = connection.user_gossip_topic;
 
         let (sender, _receiver) = user_gtopic.split();
@@ -245,7 +262,7 @@ mod tests {
         tokio::signal::ctrl_c().await?;
         println!("> online_peers:\n{:?}", user.online_peers()?.keys());
         println!("> closing server ...");
-        server.close().await?;
+        server_future.close().await?;
         println!("> closing user ...");
         user.close().await?;
         Ok(())
@@ -275,7 +292,7 @@ mod tests {
         user.set_debug(true)?;
         let id_vec: Vec<u64> = (0..10).collect();
         let relay_vec: Vec<String> = RELAY_VEC.iter().map(|s| s.to_string()).collect();
-        let server_addrs = get_server_addresses(&id_vec, &relay_vec, &SEED).await?;
+        let server_addrs = get_server_addresses(&id_vec, &relay_vec, &SEED)?;
         // println!("> server_addrs:\n{:#?}", server_addrs);
         user.add_node_addresses(&server_addrs).await?;
         let node_ids: Vec<NodeId> = server_addrs.iter().map(|addr| addr.node_id).collect();
@@ -316,7 +333,7 @@ mod tests {
         user.set_debug(true)?;
         let id_vec: Vec<u64> = vec![id];
         let relay_vec: Vec<String> = RELAY_VEC.iter().map(|s| s.to_string()).collect();
-        let server_addrs = get_server_addresses(&id_vec, &relay_vec, &SEED).await?;
+        let server_addrs = get_server_addresses(&id_vec, &relay_vec, &SEED)?;
         let user_handle = user.connect_to_servers(server_addrs).await?;
         let user_gtopic = user_handle.await??;
         let (sender, _receiver) = user_gtopic.split();
