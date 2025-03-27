@@ -35,7 +35,7 @@ impl Default for ConnectOptions {
             starting_server_id: 0,
             debug: false,
             search_duration: Duration::from_secs(7),
-            n_server_to_search: 1,
+            n_server_to_search: 250,
             known_addresses: Vec::new(),
         }
     }
