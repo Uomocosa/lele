@@ -1,9 +1,10 @@
 use std::{
     error::Error, time::{Duration, Instant},
 };
+use bytes::BufMut;
 use futures::StreamExt;
 use libp2p::{
-    identity, kad::{self, store::MemoryStore}, noise, swarm::NetworkBehaviour, tcp, yamux, StreamProtocol
+    identify, identity, kad::{self, store::MemoryStore}, noise, swarm::NetworkBehaviour, tcp, yamux, StreamProtocol
 };
 use tracing_subscriber::EnvFilter;
 
@@ -25,6 +26,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[derive(NetworkBehaviour)]
     pub struct Behaviour {
         kademlia: kad::Behaviour<MemoryStore>,
+        identify: identify::Behaviour,
     }
 
     // Create a random key for ourselves.
@@ -41,11 +43,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )?
         .with_dns()?
         .with_behaviour(|key| {
-            let mut cfg = kad::Config::new(IPFS_PROTO_NAME);
-            cfg.set_query_timeout(Duration::from_secs(5 * 60));
+            let mut kad_cfg = kad::Config::new(IPFS_PROTO_NAME);
+            kad_cfg.set_query_timeout(Duration::from_secs(5 * 60));
             let store = kad::store::MemoryStore::new(key.public().to_peer_id());
+            let id_cfg = identify::Config::new(
+                "/ipfs/id/1.0.0".to_string(),
+                key.public()
+            );
             Ok(Behaviour {
-                kademlia: kad::Behaviour::with_config(key.public().to_peer_id(), store, cfg),
+                kademlia: kad::Behaviour::with_config(key.public().to_peer_id(), store, kad_cfg),
+                identify: identify::Behaviour::new(id_cfg),
             })
         })?
         .build();
@@ -61,20 +68,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     swarm.behaviour_mut().kademlia.bootstrap()?;
 
-    // println!(">>> await for bootstrapping ...");
-    // loop{
-    //     let event = swarm.select_next_some().await;
-    //     if let libp2p::swarm::SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed{ result, ..})) = event { 
-    //         if let libp2p::kad::QueryResult::Bootstrap(Ok(_)) = result{
-    //             println!("\t>> found bootstrap node ✓");
-    //             break;
-    //         }
-    //     }
-    // }
+    println!(">>> await for bootstrapping ...");
+    loop{
+        let event = swarm.select_next_some().await;
+        if let libp2p::swarm::SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed{result, ..})) = event { 
+            if let libp2p::kad::QueryResult::Bootstrap(Ok(bootstrap_ok)) = result {
+                if bootstrap_ok.num_remaining == 0 { break; }              
+            }
+        }
+    }
 
     // let my_key = [118, 60, 141, 37, 201, 183, 174, 98, 151, 39, 67, 220, 24, 13, 88, 175, 231, 222, 14, 226, 192, 204, 52, 38, 36, 68, 192, 30, 10, 146, 171, 73];
-    // let my_key: Vec<u8> = vec![1, 2, 3, 4, 5];
-    let my_key= "/standardofcomuniation/lele/testing/libp2p";
+    let my_key: Vec<u8> = vec![1, 2, 3, 4, 5];
+    // let my_key= "/standardofcomuniation/lele/testing/libp2p";
     let record_key = libp2p::kad::RecordKey::new(&my_key);
     let rand_byte = lele::rnd::get_random_bytes::<1>()[0];
     println!("rand_byte: {rand_byte:?}");
@@ -84,6 +90,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .kademlia
             .start_providing(record_key.clone())
             .expect("Failed to start providing key");
+
+        println!(">>> Putting PK record into the DHT ...");
+
+        // let mut pk_record_key = my_key;
+        let mut pk_record_key = vec![];
+        pk_record_key.put_slice("/pk/".as_bytes());
+        pk_record_key.put_slice(swarm.local_peer_id().to_bytes().as_slice());
+
+        let mut pk_record =
+            kad::Record::new(pk_record_key, local_key.public().encode_protobuf());
+        pk_record.publisher = Some(*swarm.local_peer_id());
+        pk_record.expires = Some(Instant::now() + Duration::from_secs(60));
+
+        swarm
+            .behaviour_mut()
+            .kademlia
+            .put_record(pk_record, kad::Quorum::N(std::num::NonZeroUsize::new(3).unwrap()))?;
     }
     else {
         println!(">>> get_providers ...");
