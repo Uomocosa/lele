@@ -1,7 +1,7 @@
 mod message;
-mod signed_message;
 mod sender;
+mod signed_message;
 
 pub use message::Message;
-pub use signed_message::SignedMessage;
 pub use sender::Sender;
+pub use signed_message::SignedMessage;

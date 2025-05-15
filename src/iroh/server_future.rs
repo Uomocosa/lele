@@ -12,7 +12,7 @@ impl ServerFuture {
         if self.handle.is_finished() {
             let server = self.handle.await??;
             server.close().await?;
-        } else  {
+        } else {
             self.handle.abort();
         }
         Ok(())

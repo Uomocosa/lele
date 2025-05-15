@@ -1,8 +1,11 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use iroh::SecretKey;
 use iroh_gossip::net::GossipSender;
 
-use crate::iroh::{gossip::{Message, SignedMessage}, User};
+use crate::iroh::{
+    User,
+    gossip::{Message, SignedMessage},
+};
 
 #[derive(Debug, Clone)]
 pub struct Sender {

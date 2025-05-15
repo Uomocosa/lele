@@ -3,8 +3,7 @@
 
 use anyhow::Result;
 use iroh::SecretKey;
-use rand::{rngs::StdRng, Rng, SeedableRng};
-
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 #[test]
 // run test by using: 'cargo test tests::secret_key_from_seed::test -- --exact --nocapture'

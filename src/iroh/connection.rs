@@ -11,7 +11,7 @@ use iroh_gossip::{
 };
 use n0_future::StreamExt;
 
-use super::{get_server_addresses, GossipFuture, Server, ServerFuture, User};
+use super::{GossipFuture, Server, ServerFuture, User, get_server_addresses};
 
 #[derive(Debug)]
 pub struct Connection {
@@ -231,7 +231,7 @@ async fn start_your_own_server(
                 (server, server_handle) =
                     get_user_and_server_handle(server_id, user.node_id().unwrap(), args, options)
                         .await?;
-                server_handle = tokio::spawn( async move {
+                server_handle = tokio::spawn(async move {
                     let x = server_handle.await??;
                     Ok(x)
                 });
@@ -256,7 +256,8 @@ async fn get_user_and_server_handle(
         args.topic_id,
         args.my_relay_url.clone(),
         &args.seed,
-    ).await?;
+    )
+    .await?;
     let debug = options.debug;
     let server_clone = server.clone();
     let node_addr = NodeAddr::new(user_node_id).with_relay_url(args.my_relay_url.clone());
@@ -298,7 +299,6 @@ mod tests {
     use std::{str::FromStr, time::Instant};
 
     #[tokio::test]
-    // run test by using: 'cargo test iroh::connection::tests::connection -- --exact --nocapture'
     async fn connection() -> Result<()> {
         tracing_subscriber::fmt::init();
         let start = Instant::now();

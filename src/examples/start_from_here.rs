@@ -9,17 +9,18 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::{
+    consts::{RELAY_VEC, SEED, TOPIC},
+    iroh::{
+        ConnectOptions, Connection, ServerFuture, User,
+        gossip::{Message, Sender, SignedMessage},
+    },
+};
 use anyhow::{Result, anyhow};
 use iroh::SecretKey;
 use iroh_gossip::{
     net::{Event, GossipEvent, GossipReceiver, GossipSender, GossipTopic},
     proto::TopicId,
-};
-use crate::{
-    consts::{RELAY_VEC, SEED, TOPIC},
-    iroh::{
-        gossip::{Message, Sender, SignedMessage}, ConnectOptions, Connection, ServerFuture, User
-    },
 };
 use n0_future::TryStreamExt;
 
@@ -77,11 +78,7 @@ pub async fn user_loop(sender: Sender, mut receiver: GossipReceiver) -> Result<(
                     println!("> {}: {}", from.fmt_short(), text);
                 }
                 Message::RequestImg { image_name } => {
-                    println!(
-                        "> {} rquested image: {}",
-                        from.fmt_short(),
-                        image_name
-                    );
+                    println!("> {} rquested image: {}", from.fmt_short(), image_name);
                     /* Here you could use iroh-blobs to send the requested image if you have it */
                 }
             }

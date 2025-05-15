@@ -1,88 +1,142 @@
-// IMPORTANT! 
-// Change the consts.rs file.
-// Read it and generate a new topic and seed.
-
 use std::{
-    str::FromStr,
-    time::{Duration, Instant},
+    error::Error, time::{Duration, Instant},
 };
+use futures::StreamExt;
+use libp2p::{
+    identity, kad::{self, store::MemoryStore}, noise, swarm::NetworkBehaviour, tcp, yamux, StreamProtocol
+};
+use tracing_subscriber::EnvFilter;
 
-use anyhow::Result;
-use iroh_gossip::{
-    net::{Event, GossipEvent, GossipReceiver, GossipTopic},
-    proto::TopicId,
-};
-use lele::{
-    consts::{RELAY_VEC, SEED, TOPIC},
-    iroh::{
-        gossip::{Message, Sender, SignedMessage}, ConnectOptions, Connection, ServerFuture, User
-    },
-};
-use n0_future::TryStreamExt;
+const BOOTNODES: [&str; 4] = [
+    "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+    "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+    "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+    "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+];
 
-const DEBUG: bool = false;
+const IPFS_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
 
 #[tokio::main]
-// run test by using: 'cargo test examples::start_from_here::example -- --exact --nocapture'
-async fn main() -> Result<()> {
-    // tracing_subscriber::fmt::init();
-    let start = Instant::now();
+async fn main() -> Result<(), Box<dyn Error>> {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
-    let options = ConnectOptions {
-        debug: DEBUG,
-        ..Default::default()
-    };
-    let topic_id = TopicId::from_str(TOPIC)?;
-    let connection = Connection::create_with_opts(topic_id, RELAY_VEC, &SEED, options).await?;
-    let user: User = connection.user;
-    let server_future: ServerFuture = connection.server_future;
-    let user_gtopic: GossipTopic = connection.user_gossip_topic;
+    #[derive(NetworkBehaviour)]
+    pub struct Behaviour {
+        kademlia: kad::Behaviour<MemoryStore>,
+    }
 
-    let (gossip_sender, receiver) = user_gtopic.split();
-    let sender = Sender::create(&user, gossip_sender)?;
-    let sender_clone = sender.clone();
-    tokio::spawn(async move { user_loop(sender_clone, receiver).await });
+    // Create a random key for ourselves.
+    let local_key = identity::Keypair::generate_ed25519();
+    let peer_id = local_key.public().to_peer_id();
+    println!("{peer_id:?}");
 
-    /* Do somenthing with sender, like: */
-    sender.broadcast(&Message::about_me(&user)?).await?;
+    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_dns()?
+        .with_behaviour(|key| {
+            let mut cfg = kad::Config::new(IPFS_PROTO_NAME);
+            cfg.set_query_timeout(Duration::from_secs(5 * 60));
+            let store = kad::store::MemoryStore::new(key.public().to_peer_id());
+            Ok(Behaviour {
+                kademlia: kad::Behaviour::with_config(key.public().to_peer_id(), store, cfg),
+            })
+        })?
+        .build();
+    // let server_mode = Some(libp2p::kad::Mode::Server);
+    // swarm.behaviour_mut().set_mode(server_mode); // this should be automatic
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
-    // Close everything
-    println!("> finished [{:?}]", start.elapsed());
-    tokio::time::sleep(Duration::from_millis(250)).await;
-    println!("> press Ctrl+C to exit.");
-    tokio::signal::ctrl_c().await?;
-    println!("> online_peers:\n{:?}", user.online_peers()?.keys());
-    println!("> closing server ...");
-    server_future.close().await?;
-    println!("> closing user ...");
-    user.close().await?;
-    Ok(())
-}
+    for peer in &BOOTNODES {
+        swarm
+            .behaviour_mut()
+            .kademlia
+            .add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
+    }
+    swarm.behaviour_mut().kademlia.bootstrap()?;
 
-// This is important, it defines how your app respond to each received Message.
-// To add new messages change the message.rs file.
-pub async fn user_loop(sender: Sender, mut receiver: GossipReceiver) -> Result<()> {
-    while let Some(event) = receiver.try_next().await? {
-        if let Event::Gossip(GossipEvent::Received(msg)) = event {
-            let (from, message) = SignedMessage::verify_and_decode(&msg.content)?;
-            match message {
-                Message::AboutMe { username } => {
-                    let msg = format!("hello {}!", &username);
-                    sender.broadcast(&Message::text(&msg)).await?;
-                }
-                Message::SimpleText { text } => {
-                    println!("> {}: {}", from.fmt_short(), text);
-                }
-                Message::RequestImg { image_name } => {
-                    println!(
-                        "> {} rquested image: {}",
-                        from.fmt_short(),
-                        image_name
-                    );
-                    /* Here you could use iroh-blobs to send the requested image if you have it */
-                }
+    // println!(">>> await for bootstrapping ...");
+    // loop{
+    //     let event = swarm.select_next_some().await;
+    //     if let libp2p::swarm::SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed{ result, ..})) = event { 
+    //         if let libp2p::kad::QueryResult::Bootstrap(Ok(_)) = result{
+    //             println!("\t>> found bootstrap node ✓");
+    //             break;
+    //         }
+    //     }
+    // }
+
+    // let my_key = [118, 60, 141, 37, 201, 183, 174, 98, 151, 39, 67, 220, 24, 13, 88, 175, 231, 222, 14, 226, 192, 204, 52, 38, 36, 68, 192, 30, 10, 146, 171, 73];
+    // let my_key: Vec<u8> = vec![1, 2, 3, 4, 5];
+    let my_key= "/standardofcomuniation/lele/testing/libp2p";
+    let record_key = libp2p::kad::RecordKey::new(&my_key);
+    let rand_byte = lele::rnd::get_random_bytes::<1>()[0];
+    println!("rand_byte: {rand_byte:?}");
+    if rand_byte % 2 == 0 {
+        println!(">>> start_providing ...");
+        swarm.behaviour_mut()
+            .kademlia
+            .start_providing(record_key.clone())
+            .expect("Failed to start providing key");
+    }
+    else {
+        println!(">>> get_providers ...");
+        swarm.behaviour_mut()
+            .kademlia
+            .get_providers(record_key.clone());
+    }
+
+    println!(">>> starting main loop ...");
+    let time = Instant::now();
+    loop {
+        let x: Vec<_> = swarm.connected_peers().collect();
+        println!("{:#?}", x);
+        let t = time.elapsed();
+        let event = swarm.select_next_some().await;
+        use libp2p::swarm::SwarmEvent as Event;
+        use libp2p::kad::QueryResult::*;
+        match event {
+            Event::ConnectionEstablished{peer_id, ..} => {
+                println!("[{t:#?}] Event::ConnectionEstablished: {peer_id:?}")
             }
+            Event::NewListenAddr{address, ..} => {
+                println!("[{t:#?}] Event::NewListenAddr: {address:?}")
+            },
+            Event::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed{ result, ..})) => {
+                match result {
+                    Bootstrap(_bootstrap_ok) => {
+                        // println!("[{t:#?}] Bootstrap: {bootstrap_ok:?}");
+                    }
+                    GetClosestPeers(get_closest_peers_ok) => {
+                        println!("[{t:#?}] GetClosestPeers: {get_closest_peers_ok:?}");
+                    },
+                    GetProviders(get_providers_ok) => {
+                        println!("[{t:#?}] GetProviders: {get_providers_ok:?}");
+                    },
+                    StartProviding(add_provider_ok) => {
+                        println!("[{t:#?}] StartProviding: {add_provider_ok:?}");
+                    },
+                    RepublishProvider(add_provider_ok) => {
+                        println!("[{t:#?}] RepublishProvider: {add_provider_ok:?}");
+                    },
+                    GetRecord(get_record_ok) => {
+                        println!("[{t:#?}] GetRecord: {get_record_ok:?}");
+                    },
+                    PutRecord(put_record_ok) => {
+                        println!("[{t:#?}] PutRecord: {put_record_ok:?}");
+                    },
+                    RepublishRecord(put_record_ok) => {
+                        println!("[{t:#?}] RepublishRecord: {put_record_ok:?}");
+                    },
+                }
+            },
+            _ => {}
         }
     }
-    Ok(())
 }
