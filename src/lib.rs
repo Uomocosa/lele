@@ -1,12 +1,15 @@
-pub mod examples;
-pub mod iroh;
+pub mod discord;
+pub mod git;
+pub mod image;
+pub mod machine_learning;
+// pub mod math; // Did not find any good symbolic math crate (2025)
+pub mod metaprogramming;
+pub mod mse;
+pub mod obsidian;
+pub mod p2p;
+pub mod path;
+pub mod plot;
 pub mod string;
-pub mod tests;
-// Automatic imports (from build.rs)
-pub mod consts;
-pub mod libp2p;
-pub mod meta;
-pub mod process;
-pub mod thread;
-pub mod vector;
-pub mod rnd;
+pub mod subprocess;
+pub mod web;
+pub mod zip;

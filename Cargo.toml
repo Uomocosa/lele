@@ -4,20 +4,31 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-iroh = { version = "0.34.0", features = ["discovery-local-network", "discovery-pkarr-dht"] } 
-iroh-gossip = "0.34.0"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = { version = "0.8.5", features = ["std_rng"] }
-anyhow = "1"
 regex = "1"
-serde = { version = "1", features = ["derive"] }
-postcard = { version = "1", default-features = false, features = ["alloc", "use-std", "experimental-derive"] }
-data-encoding = "2"
-bytes = { version = "1", features = ["serde"] }
-ed25519-dalek = { version = "2", features = ["serde", "rand_core"] }
-futures-lite = "2"
 tokio = { version = "1", features = ["full"] }
-hex = "0.4.3"
-n0-future = "0.1.2"
-futures = "0.3.31"
-libp2p = { version = "0.55.0", features = [ "tokio", "dns", "kad", "mdns", "identify", "noise", "macros", "tcp", "yamux"] }
+### OLD DEPENDENCIES
+# iroh = { version = "0.34.0", features = ["discovery-local-network", "discovery-pkarr-dht"] } 
+# iroh-gossip = "0.34.0"
+# tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# anyhow = "1"
+# serde = { version = "1", features = ["derive"] }
+# postcard = { version = "1", default-features = false, features = ["alloc", "use-std", "experimental-derive"] }
+# data-encoding = "2"
+# bytes = { version = "1", features = ["serde"] }
+# ed25519-dalek = { version = "2", features = ["serde", "rand_core"] }
+# futures-lite = "2"
+# hex = "0.4.3"
+# n0-future = "0.1.2"
+# futures = "0.3.31"
+# libp2p = { version = "0.55.0", features = [ "tokio", "dns", "kad", "mdns", "identify", "noise", "macros", "tcp", "yamux"] }
+
+
+### symbolica = "0.17.0" # DO NOT USE ON WINDOWS
+### IT IS NOT AN MIT LICENSE!
+### IMPORTANT! TO USE 'symbolica' (on Windows) :
+### 1. Install mysys64
+### 2. Open the executable 'MYSYS2 MINGW64' and paste 'pacman -S m4'
+### 3. Add C:\msys64\mingw64\bin
+### 4. Add C:\msys64\usr\bin
+### 5. It will still cause problems
